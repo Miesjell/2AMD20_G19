@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """
-Main module for the food knowledge graph application.
+Food Knowledge Graph Application
 
-This script provides a command-line interface for loading data into the Neo4j
-knowledge graph and running queries against it.
+This script provides a command-line interface for building and interacting with
+a knowledge graph of food data, recipes, dietary preferences, and personalized
+recommendations using Neo4j as the graph database.
+
+Usage:
+    python main.py [options]
+
+Example:
+    python main.py --data-dir data --start-docker
 """
 
 import os
@@ -39,7 +46,13 @@ logger = logging.getLogger("food_kg")
 
 
 class FoodKnowledgeGraph:
-    """Main class for managing the food knowledge graph."""
+    """
+    Main class for managing the food knowledge graph.
+    
+    This class serves as the central coordinator for all interactions with the 
+    knowledge graph, including data loading, schema setup, relationship creation,
+    and query execution.
+    """
 
     def __init__(
         self,
@@ -57,11 +70,14 @@ class FoodKnowledgeGraph:
             password: Neo4j password
             compose_file: Path to docker-compose.yml file
         """
+        # Connection settings
         self.uri = uri
         self.user = user
         self.password = password
         self.compose_file = compose_file
         self.connection = Neo4jConnection(uri, user, password)
+        
+        # Component initialization
         self.schema = KnowledgeGraphSchema()
         self.food_loader = FoodItemLoader()
         self.recipe_loader = RecipeLoader()
@@ -92,7 +108,7 @@ class FoodKnowledgeGraph:
 
     def connect(self) -> bool:
         """
-        Connect to the Neo4j database.
+        Connect to the Neo4j database and initialize all components.
 
         Returns:
             bool: True if connection successful, False otherwise
@@ -119,7 +135,7 @@ class FoodKnowledgeGraph:
 
     def setup_schema(self) -> Dict[str, Any]:
         """
-        Set up the schema (constraints and indexes).
+        Set up the Neo4j schema with constraints and indexes.
 
         Returns:
             Dict with setup results
@@ -245,56 +261,109 @@ class FoodKnowledgeGraph:
 
 
 def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Food Knowledge Graph Manager")
-
-    parser.add_argument(
-        "--data-dir", default="data", help="Directory containing data files"
+    """Parse command line arguments with descriptions."""
+    parser = argparse.ArgumentParser(
+        description="Food Knowledge Graph Manager",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+
+    # Data source parameters
+    parser.add_argument(
+        "--data-dir", 
+        default="data", 
+        help="Directory containing data files"
+    )
+    
+    # Connection parameters
     parser.add_argument(
         "--docker-compose",
         default="docker-compose.yml",
         help="Path to docker-compose.yml file",
     )
     parser.add_argument(
-        "--uri", default="bolt://localhost:7687", help="Neo4j connection URI"
-    )
-    parser.add_argument("--user", default="neo4j", help="Neo4j username")
-    parser.add_argument("--password", default="password", help="Neo4j password")
-    parser.add_argument(
-        "--start-docker", action="store_true", help="Start Neo4j Docker container"
+        "--uri", 
+        default="bolt://localhost:7687", 
+        help="Neo4j connection URI"
     )
     parser.add_argument(
-        "--stop-docker", action="store_true", help="Stop Neo4j Docker container"
+        "--user", 
+        default="neo4j", 
+        help="Neo4j username"
     )
     parser.add_argument(
-        "--sample-recipes", type=int, default=1000, help="Number of recipes to sample"
+        "--password", 
+        default="password", 
+        help="Neo4j password"
+    )
+    
+    # Docker control parameters
+    parser.add_argument(
+        "--start-docker", 
+        action="store_true", 
+        help="Start Neo4j Docker container"
     )
     parser.add_argument(
-        "--sample-persons", type=int, default=1000, help="Number of persons to sample"
+        "--stop-docker", 
+        action="store_true", 
+        help="Stop Neo4j Docker container"
     )
-    parser.add_argument("--skip-schema", action="store_true", help="Skip schema setup")
+    
+    # Data sampling parameters
     parser.add_argument(
-        "--skip-food", action="store_true", help="Skip food data loading"
-    )
-    parser.add_argument(
-        "--skip-recipes", action="store_true", help="Skip recipe data loading"
-    )
-    parser.add_argument(
-        "--skip-persons", action="store_true", help="Skip person data loading"
-    )
-    parser.add_argument(
-        "--skip-relationships", action="store_true", help="Skip relationship creation"
+        "--sample-recipes", 
+        type=int, 
+        default=10000, 
+        help="Number of recipes to sample"
     )
     parser.add_argument(
-        "--skip-queries", action="store_true", help="Skip running verification queries"
+        "--sample-persons", 
+        type=int, 
+        default=10000, 
+        help="Number of persons to sample"
+    )
+    
+    # Skip-step parameters
+    parser.add_argument(
+        "--skip-schema", 
+        action="store_true", 
+        help="Skip schema setup"
+    )
+    parser.add_argument(
+        "--skip-food", 
+        action="store_true", 
+        help="Skip food data loading"
+    )
+    parser.add_argument(
+        "--skip-recipes", 
+        action="store_true", 
+        help="Skip recipe data loading"
+    )
+    parser.add_argument(
+        "--skip-persons", 
+        action="store_true", 
+        help="Skip person data loading"
+    )
+    parser.add_argument(
+        "--skip-relationships", 
+        action="store_true", 
+        help="Skip relationship creation"
+    )
+    parser.add_argument(
+        "--skip-queries", 
+        action="store_true", 
+        help="Skip running verification queries"
     )
 
     return parser.parse_args()
 
 
 def main():
-    """Main entry point for the food knowledge graph manager."""
+    """
+    Main entry point for the food knowledge graph manager.
+    
+    Orchestrates the entire process of setting up and querying the knowledge graph
+    based on command-line arguments.
+    """
     args = parse_args()
 
     # Create the knowledge graph manager
@@ -361,19 +430,7 @@ def main():
         logger.info("\nKnowledge graph setup completed successfully!")
 
         # Print prominent message about Neo4j Browser access
-        print("\n" + "=" * 80)
-        print("  NEO4J BROWSER ACCESS")
-        print("=" * 80)
-        print("  You can access your Knowledge Graph at: http://localhost:7474/")
-        print(f"  Username: {args.user}")
-        print(f"  Password: {args.password}")
-        print("=" * 80)
-        print("  To explore your graph, try these Cypher queries:")
-        print("  MATCH (n) RETURN n LIMIT 25")
-        print(
-            "  MATCH (p:Person)-[:RECOMMENDED_RECIPE]->(r:Recipe) RETURN p, r LIMIT 10"
-        )
-        print("=" * 80)
+        print_browser_access_info(args.user, args.password)
 
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -388,6 +445,29 @@ def main():
             kg.stop_docker()
 
     return 0
+
+
+def print_browser_access_info(user: str, password: str) -> None:
+    """
+    Print information about how to access the Neo4j Browser.
+    
+    Args:
+        user: Neo4j username
+        password: Neo4j password
+    """
+    print("\n" + "=" * 80)
+    print("  NEO4J BROWSER ACCESS")
+    print("=" * 80)
+    print("  You can access your Knowledge Graph at: http://localhost:7474/")
+    print(f"  Username: {user}")
+    print(f"  Password: {password}")
+    print("=" * 80)
+    print("  To explore your graph, try these Cypher queries:")
+    print("  MATCH (n) RETURN n LIMIT 25")
+    print(
+        "  MATCH (p:Person)-[:RECOMMENDED_RECIPE]->(r:Recipe) RETURN p, r LIMIT 10"
+    )
+    print("=" * 80)
 
 
 if __name__ == "__main__":

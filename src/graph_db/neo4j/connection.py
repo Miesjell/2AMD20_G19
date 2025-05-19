@@ -1,9 +1,13 @@
 """
 Neo4j database connection module for the food knowledge graph.
+
+This module provides functionality for connecting to a Neo4j database, 
+managing Neo4j Docker containers, and executing queries.
 """
 
 import subprocess
-from typing import Optional, Dict, Any, List
+import time
+from typing import Optional, Dict, Any, List, Tuple
 
 from neo4j import GraphDatabase, Driver, Record
 import pandas as pd
@@ -13,6 +17,9 @@ def start_neo4j_docker(compose_file: str = "docker-compose.yml") -> bool:
     """
     Start Neo4j Docker container using docker-compose.
     
+    This function attempts to start a Neo4j container using Docker Compose.
+    It supports both Docker Compose v1 (docker-compose) and v2 (docker compose).
+    
     Args:
         compose_file: Path to docker-compose.yml file
         
@@ -20,24 +27,41 @@ def start_neo4j_docker(compose_file: str = "docker-compose.yml") -> bool:
         bool: True if successful, False otherwise
     """
     try:
-        # Build command
-        cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
+        # First, check if Docker Compose v2 is available (part of Docker CLI)
+        is_compose_v2 = False
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "version"], 
+                capture_output=True, 
+                check=False, 
+                text=True
+            )
+            is_compose_v2 = result.returncode == 0
+        except Exception:
+            # If the check fails, assume v1 is available
+            pass
         
-        # Allow Docker compose v2 syntax
-        if subprocess.run(["docker", "compose", "version"], 
-                          capture_output=True, 
-                          check=False).returncode == 0:
+        # Build the appropriate command based on version
+        if is_compose_v2:
             cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
+        else:
+            cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
         
         # Execute the command
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("Docker container started successfully!")
+        print("Neo4j Docker container started successfully!")
+        
+        # Wait a moment to ensure container is properly started
+        time.sleep(2)
         return True
+        
     except subprocess.CalledProcessError as e:
         print(f"Error starting Docker container: {e}")
+        if hasattr(e, 'stderr') and e.stderr:
+            print(f"Error details: {e.stderr}")
         return False
     except FileNotFoundError:
-        print("Docker or docker-compose command not found")
+        print("Docker or docker-compose command not found. Please ensure Docker is installed.")
         return False
 
 
@@ -55,19 +79,33 @@ def stop_neo4j_docker(
         bool: True if successful, False otherwise
     """
     try:
-        base_cmd = ["docker-compose"]
-
-        # Build the command
-        cmd = base_cmd + ["-f", compose_file, "-p", project_name, "down"]
+        # Determine if Docker Compose v2 is available
+        is_compose_v2 = False
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "version"], 
+                capture_output=True, 
+                check=False, 
+                text=True
+            )
+            is_compose_v2 = result.returncode == 0
+        except Exception:
+            pass
+            
+        # Build the appropriate command
+        if is_compose_v2:
+            cmd = ["docker", "compose", "-f", compose_file, "-p", project_name, "down"]
+        else:
+            cmd = ["docker-compose", "-f", compose_file, "-p", project_name, "down"]
 
         # Execute the command
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("Docker container stopped successfully!")
+        print("Neo4j Docker container stopped successfully!")
         return True
 
     except subprocess.CalledProcessError as e:
         print(f"Error stopping Docker container: {e}")
-        if e.stderr:
+        if hasattr(e, 'stderr') and e.stderr:
             print(f"Error details: {e.stderr}")
         return False
     except Exception as e:
@@ -75,9 +113,35 @@ def stop_neo4j_docker(
         return False
 
 
+def check_neo4j_docker_running() -> Tuple[bool, str]:
+    """
+    Check if Neo4j Docker container is running.
+    
+    Returns:
+        Tuple[bool, str]: (is_running, status_message)
+    """
+    try:
+        # List containers using docker command
+        cmd = ["docker", "ps", "--filter", "name=neo4j", "--format", "{{.Status}}"]
+        result = subprocess.run(cmd, capture_output=True, check=True, text=True)
+        
+        # Check output to determine if Neo4j is running
+        if "Up" in result.stdout:
+            return True, "Neo4j container is running"
+        else:
+            return False, "Neo4j container is not running"
+    except subprocess.CalledProcessError as e:
+        return False, f"Error checking Neo4j container status: {e}"
+    except FileNotFoundError:
+        return False, "Docker command not found"
+
+
 class Neo4jConnection:
     """
     Class to manage Neo4j database connections and operations.
+    
+    This class provides methods for connecting to Neo4j, executing queries,
+    and retrieving information about the database.
     """
 
     def __init__(
@@ -101,25 +165,42 @@ class Neo4jConnection:
         self.password = password
         self.database = database
         self.driver = None
+        self.connected = False
 
-    def connect(self) -> bool:
+    def connect(self, max_retries: int = 3, retry_delay: int = 2) -> bool:
         """
-        Establish connection to the Neo4j database.
+        Establish connection to the Neo4j database with retry functionality.
 
+        Args:
+            max_retries: Maximum number of connection attempts
+            retry_delay: Delay between retries in seconds
+            
         Returns:
             bool: True if connection successful, False otherwise
         """
-        try:
-            self.driver = GraphDatabase.driver(
-                self.uri, auth=(self.user, self.password)
-            )
-            # Verify connectivity
-            self.driver.verify_connectivity()
-            print(f"Successfully connected to Neo4j at {self.uri}")
-            return True
-        except Exception as e:
-            print(f"Failed to connect to Neo4j: {e}")
-            return False
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                self.driver = GraphDatabase.driver(
+                    self.uri, auth=(self.user, self.password)
+                )
+                # Verify connectivity
+                self.driver.verify_connectivity()
+                self.connected = True
+                print(f"Successfully connected to Neo4j at {self.uri}")
+                return True
+                
+            except Exception as e:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    print(f"Failed to connect to Neo4j after {max_retries} attempts: {e}")
+                    return False
+                
+                print(f"Connection attempt {retry_count} failed: {e}. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+        
+        return False
 
     def close(self) -> None:
         """Close the Neo4j connection."""
@@ -127,6 +208,7 @@ class Neo4jConnection:
             self.driver.close()
             print("Neo4j connection closed.")
             self.driver = None
+            self.connected = False
 
     def get_driver(self) -> Optional[Driver]:
         """
