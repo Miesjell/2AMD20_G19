@@ -2,3 +2,14 @@
 *.csv
 *.parquet
 **/__pycache__/
+# Neo4j database files
+/neo4j/
+/neo4j/data/
+/neo4j/logs/
+/neo4j/import/
+/neo4j/plugins/
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+# Environment
+.venv/
+.env
