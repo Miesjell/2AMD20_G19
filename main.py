@@ -344,6 +344,19 @@ def main():
         
         logger.info("\nKnowledge graph setup completed successfully!")
         
+        # Print prominent message about Neo4j Browser access
+        print("\n" + "="*80)
+        print("  NEO4J BROWSER ACCESS")
+        print("="*80)
+        print(f"  You can access your Knowledge Graph at: http://localhost:7474/")
+        print(f"  Username: {args.user}")
+        print(f"  Password: {args.password}")
+        print("="*80)
+        print("  To explore your graph, try these Cypher queries:")
+        print("  MATCH (n) RETURN n LIMIT 25")
+        print("  MATCH (p:Person)-[:RECOMMENDED_RECIPE]->(r:Recipe) RETURN p, r LIMIT 10")
+        print("="*80)
+        
     except Exception as e:
         logger.error(f"Error: {e}")
         return 1
