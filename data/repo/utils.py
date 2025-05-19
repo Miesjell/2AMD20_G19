@@ -1,39 +1,41 @@
-#coding: utf8
+# coding: utf8
 import pandas as pd
 import numpy as np
 
-def sublist_uniques(data,sublist):
+
+def sublist_uniques(data, sublist):
     categories = set()
-    for d,t in data.iterrows():
+    for d, t in data.iterrows():
         try:
             for j in t[sublist]:
                 categories.add(j)
-        except:
+        except Exception:
             pass
     return list(categories)
 
-def sublists_to_binaries(data,sublist,index_key = None):
-    categories = sublist_uniques(data,sublist)
+
+def sublists_to_binaries(data, sublist, index_key=None):
+    categories = sublist_uniques(data, sublist)
     frame = pd.DataFrame(columns=categories)
-    for d,i in data.iterrows():
-        if type(i[sublist]) == list or np.array:
+    for d, i in data.iterrows():
+        if isinstance(i[sublist], list) or isinstance(i[sublist], np.ndarray):
             try:
-                if index_key != None:
+                if index_key is not None:
                     key = i[index_key]
-                    f =np.zeros(len(categories))
+                    f = np.zeros(len(categories))
                     for j in i[sublist]:
                         f[categories.index(j)] = 1
                     if key in frame.index:
                         for j in i[sublist]:
-                            frame.loc[key][j]+=1
+                            frame.loc[key][j] += 1
                     else:
-                        frame.loc[key]=f
+                        frame.loc[key] = f
                 else:
-                    f =np.zeros(len(categories))
+                    f = np.zeros(len(categories))
                     for j in i[sublist]:
                         f[categories.index(j)] = 1
-                    frame.loc[d]=f
-            except:
+                    frame.loc[d] = f
+            except Exception:
                 pass
-                
+
     return frame

@@ -1,7 +1,8 @@
 """
 Person loader for the knowledge graph.
 """
-from typing import Dict, Any, List, Optional
+
+from typing import Dict, Any, Optional
 
 import pandas as pd
 from neo4j import Driver
@@ -12,35 +13,41 @@ from .base import DataLoader
 
 class PersonLoader(DataLoader):
     """Loader for persons and their diet/allergy relationships."""
-    
+
     def __init__(self, driver: Optional[Driver] = None):
         """Initialize the person loader."""
         super().__init__(driver)
-    
-    def load_data(self, data: pd.DataFrame, 
-                  sample_size: Optional[int] = None, 
-                  batch_size: int = 25) -> Dict[str, Any]:
+
+    def load_data(
+        self,
+        data: pd.DataFrame,
+        sample_size: Optional[int] = None,
+        batch_size: int = 25,
+    ) -> Dict[str, Any]:
         """
         Load person data into the Neo4j database.
-        
+
         Args:
             data: DataFrame with person data
             sample_size: Optional sample size to limit processing
             batch_size: Number of records to process in each batch
-            
+
         Returns:
             Dict with load results
         """
         if not self.driver:
-            return {"status": "error", "error": "Neo4j driver not set. Call set_driver() first."}
-        
+            return {
+                "status": "error",
+                "error": "Neo4j driver not set. Call set_driver() first.",
+            }
+
         # Sample if needed to avoid processing too much data at once
         if sample_size and len(data) > sample_size:
             data = data.sample(sample_size, random_state=42)
-        
+
         # Create batches for efficient loading
         batches = self.batch_data(data, batch_size)
-        
+
         # Cypher query for batch loading persons
         query = """
         UNWIND $persons AS person
@@ -63,34 +70,50 @@ class PersonLoader(DataLoader):
         MERGE (a:Allergy {name: person.allergy})
         MERGE (p)-[:HAS_ALLERGY]->(a)
         """
-        
+
         total_processed = 0
         errors = []
-        
+
         with self.driver.session() as session:
             # Add tqdm progress bar for batches
-            for batch_idx, batch in enumerate(tqdm(batches, desc="Loading persons", unit="batch")):
+            for batch_idx, batch in enumerate(
+                tqdm(batches, desc="Loading persons", unit="batch")
+            ):
                 # Prepare data for this batch
                 persons = []
-                
+
                 for idx, row in batch.iterrows():
                     try:
                         person = {
                             "id": f"person_{idx}",
-                            "diet_preference": self.clean_text(row.get("Dietary_Habits", "")),
+                            "diet_preference": self.clean_text(
+                                row.get("Dietary_Habits", "")
+                            ),
                             "allergy": self.clean_text(row.get("Allergies", "")),
-                            "recommended_calories": self._extract_numeric(row, "Recommended_Calories"),
-                            "recommended_protein": self._extract_numeric(row, "Recommended_Protein"),
-                            "recommended_carbs": self._extract_numeric(row, "Recommended_Carbs"),
-                            "recommended_fats": self._extract_numeric(row, "Recommended_Fats"),
-                            "preferred_cuisine": self.clean_text(row.get("Preferred_Cuisine", "")),
-                            "food_aversions": self.clean_text(row.get("Food_Aversions", "")),
-                            "budget": "medium"  # Default budget level
+                            "recommended_calories": self._extract_numeric(
+                                row, "Recommended_Calories"
+                            ),
+                            "recommended_protein": self._extract_numeric(
+                                row, "Recommended_Protein"
+                            ),
+                            "recommended_carbs": self._extract_numeric(
+                                row, "Recommended_Carbs"
+                            ),
+                            "recommended_fats": self._extract_numeric(
+                                row, "Recommended_Fats"
+                            ),
+                            "preferred_cuisine": self.clean_text(
+                                row.get("Preferred_Cuisine", "")
+                            ),
+                            "food_aversions": self.clean_text(
+                                row.get("Food_Aversions", "")
+                            ),
+                            "budget": "medium",  # Default budget level
                         }
                         persons.append(person)
                     except Exception as e:
                         errors.append(f"Error processing person {idx}: {str(e)}")
-                
+
                 # Execute the batch
                 try:
                     if persons:  # Only run if we have valid persons
@@ -98,22 +121,26 @@ class PersonLoader(DataLoader):
                         total_processed += len(persons)
                 except Exception as e:
                     errors.append(f"Error in batch {batch_idx}: {str(e)}")
-        
+
         return {
-            "status": "success" if not errors else "partial_success" if total_processed > 0 else "error",
+            "status": "success"
+            if not errors
+            else "partial_success"
+            if total_processed > 0
+            else "error",
             "total_processed": total_processed,
             "total_records": len(data),
-            "errors": errors[:10] if len(errors) > 10 else errors  # Limit error output
+            "errors": errors[:10] if len(errors) > 10 else errors,  # Limit error output
         }
-    
+
     def _extract_numeric(self, row: pd.Series, column: str) -> Optional[float]:
         """
         Extract numeric value safely.
-        
+
         Args:
             row: DataFrame row
             column: Column name
-            
+
         Returns:
             Float value or None
         """

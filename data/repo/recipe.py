@@ -1,4 +1,3 @@
-import datetime
 from bs4 import BeautifulSoup as bs
 import abc
 from urllib.request import urlopen as url
@@ -7,9 +6,9 @@ from urllib.request import urlopen as url
 # must be passed raw html
 class Recipe:
     __metaclass__ = abc.ABCMeta
-    title = ''
-    date = ''
-    desc = ''
+    title = ""
+    date = ""
+    desc = ""
     ingredients = []
     directions = []
     categories = []
@@ -47,36 +46,61 @@ class Recipe:
         self.desc = self.get_desc(page)
 
     def __init__(self, page):
-        print('attempting to build from: '+page)
+        print("attempting to build from: " + page)
         try:
-            self.build_recipie(bs(url(page), 'html.parser'))
+            self.build_recipie(bs(url(page), "html.parser"))
         except Exception as x:
-            print('Could not build from %s, %s'%(page,x))
+            print("Could not build from %s, %s" % (page, x))
+
 
 class FN_Recipe(Recipe):
     def get_title(self, page):
-        return page.find('div', {'class': 'tier-3 title'}).text.encode('utf-8').strip()
+        return page.find("div", {"class": "tier-3 title"}).text.encode("utf-8").strip()
 
     def get_ingredients(self, page):
-        return [i.text.encode('utf-8').strip() for i in
-                page.find_all('div', {'class': 'ingredients'})[0].find_all('li')]
+        return [
+            i.text.encode("utf-8").strip()
+            for i in page.find_all("div", {"class": "ingredients"})[0].find_all("li")
+        ]
 
     def get_directions(self, page):
-        return [i.text.encode('utf-8').strip() for i in
-                page.find_all('ul', {'class': 'recipe-directions-list'})[0].find_all('li')]
+        return [
+            i.text.encode("utf-8").strip()
+            for i in page.find_all("ul", {"class": "recipe-directions-list"})[
+                0
+            ].find_all("li")
+        ]
 
     def get_categories(self, page):
-        return [i.text.encode('utf-8').strip() for i in page.find_all('ul', {'class': 'categories'})[0].find_all('li')]
+        return [
+            i.text.encode("utf-8").strip()
+            for i in page.find_all("ul", {"class": "categories"})[0].find_all("li")
+        ]
 
     def get_date(self, page):
         try:
             page_s = str(page)
-            return page_s[page_s.index('OrigPubDate') + 14:page_s.index('OrigPubDate') + 24]
-        except:
-            return ''
+            return self.get_orig_date(page_s)
+        except Exception:
+            return ""
 
     def get_desc(self, page):
-        return [dd['content'] for dd in page.find_all('meta', {'itemprop': 'description'})][-1].encode('utf-8').strip()
+        return (
+            [
+                dd["content"]
+                for dd in page.find_all("meta", {"itemprop": "description"})
+            ][-1]
+            .encode("utf-8")
+            .strip()
+        )
+
+    def get_orig_date(self, page_s):
+        try:
+            return page_s[
+                page_s.index("OrigPubDate") + 14 : page_s.index("OrigPubDate") + 24
+            ]
+        except Exception:
+            return ""
 
 
 # No scripting shit apparently needed
@@ -87,35 +111,42 @@ class EP_Recipe(Recipe):
     fat = None
     protein = None
 
-
     def get_date(self, page):
         try:
-            return page.find('meta', {'itemprop': 'datePublished'})['content']
-        except:
+            return page.find("meta", {"itemprop": "datePublished"})["content"]
+        except Exception:
             return None
 
     def get_desc(self, page):
         try:
-            return page.find('div', {'itemprop': 'description'}).find('p').text
-        except:
+            return page.find("div", {"itemprop": "description"}).find("p").text
+        except Exception:
             return None
 
     def get_directions(self, page):
-        return [i.text.strip() for i in page.find_all('li', {'class': "preparation-step"})]
+        return [
+            i.text.strip() for i in page.find_all("li", {"class": "preparation-step"})
+        ]
 
     def get_ingredients(self, page):
-        return [i.text.strip() for i in page.find_all('li', {'itemprop': "ingredients"})]
+        return [
+            i.text.strip() for i in page.find_all("li", {"itemprop": "ingredients"})
+        ]
 
     def get_categories(self, page):
-        return [i.text for i in page.find_all('dt', {'itemprop': "recipeCategory"})]
+        return [i.text for i in page.find_all("dt", {"itemprop": "recipeCategory"})]
 
     def get_title(self, page):
-        return page.find('h1', {'itemprop': 'name'}).text
+        return page.find("h1", {"itemprop": "name"}).text
 
     def get_rating(self, page):
         try:
-            return float(page.find_all('span', {'class': 'rating'})[-1].text.split('/')[0]) * 5 / 4
-        except:
+            return (
+                float(page.find_all("span", {"class": "rating"})[-1].text.split("/")[0])
+                * 5
+                / 4
+            )
+        except Exception:
             return None
 
     def build_recipie(self, page):
@@ -126,47 +157,59 @@ class EP_Recipe(Recipe):
         self.fat = self.get_fat(page)
         self.protein = self.get_protein(page)
 
-    def get_calories(self,page):
+    def get_calories(self, page):
         try:
-            return float(page.find('span',{'class':'nutri-data','itemprop':'calories'}).text)
-        except:
+            return float(
+                page.find("span", {"class": "nutri-data", "itemprop": "calories"}).text
+            )
+        except Exception:
             return None
 
-    def get_sodium(self,page):
+    def get_sodium(self, page):
         try:
-            return float(page.find('span',{'class':'nutri-data','itemprop':'sodiumContent'}).text.split(' ')[0])
-        except:
+            return float(
+                page.find(
+                    "span", {"class": "nutri-data", "itemprop": "sodiumContent"}
+                ).text.split(" ")[0]
+            )
+        except Exception:
             return None
 
     def get_fat(self, page):
         try:
-            return float(page.find('span', {'class': 'nutri-data', 'itemprop': 'fatContent'}).text.split(' ')[0])
-        except:
+            return float(
+                page.find(
+                    "span", {"class": "nutri-data", "itemprop": "fatContent"}
+                ).text.split(" ")[0]
+            )
+        except Exception:
             return None
 
     def get_protein(self, page):
         try:
-            return float(page.find('span', {'class': 'nutri-data', 'itemprop': 'proteinContent'}).text.split(' ')[0])
-        except:
+            return float(
+                page.find(
+                    "span", {"class": "nutri-data", "itemprop": "proteinContent"}
+                ).text.split(" ")[0]
+            )
+        except Exception:
             return None
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     import pickle
     import json
-    import multiprocessing
+
     # ep_urls = pickle.load(open('epi_urls.checkpoint','rb'))
     # ep_urls = [str(i) for i in ep_urls]
     # p = multiprocessing.Pool(4)
     # output = p.map(EP_Recipe,ep_urls)
     # pickle.dump(output,open('epi_recipes.final','wb'))
-    data = pickle.load(open('epi_recipes.final','rb'))
+    data = pickle.load(open("epi_recipes.final", "rb"))
     ar = []
     for i in data:
         ar.append(i.__dict__)
-    pickle.dump(ar,open('epi_recipe_dict_form.dict','wb'))
+    pickle.dump(ar, open("epi_recipe_dict_form.dict", "wb"))
 
-    with open('result.json', 'w') as fp:
+    with open("result.json", "w") as fp:
         json.dump(ar, fp)
-
