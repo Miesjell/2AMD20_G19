@@ -4,6 +4,7 @@ Relationship builder for the food knowledge graph.
 from typing import Dict, Any, Optional
 
 from neo4j import Driver
+from tqdm import tqdm
 
 
 class RelationshipBuilder:
@@ -107,8 +108,11 @@ class RelationshipBuilder:
         results = []
         
         with self.driver.session() as session:
-            for rel in relationships:
+            # Add tqdm for progress tracking of relationship creation
+            for rel in tqdm(relationships, desc="Creating relationships", unit="relationship"):
                 try:
+                    # Show which relationship is being created
+                    tqdm.write(f"Creating {rel['name']} relationships...")
                     session.run(rel["query"])
                     results.append({
                         "relationship": rel["name"],

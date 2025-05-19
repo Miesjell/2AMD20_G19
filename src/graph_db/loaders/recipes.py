@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 import pandas as pd
 import numpy as np
 from neo4j import Driver
+from tqdm import tqdm
 
 from .base import DataLoader
 
@@ -71,7 +72,8 @@ class RecipeLoader(DataLoader):
         recipes_without_ingredients = 0
         
         with self.driver.session() as session:
-            for batch_idx, batch in enumerate(batches):
+            # Add tqdm progress bar for batches
+            for batch_idx, batch in enumerate(tqdm(batches, desc=f"Loading recipes from {source_name}", unit="batch")):
                 # Prepare data for this batch
                 recipes = []
                 batch_recipes_with_ingredients = 0

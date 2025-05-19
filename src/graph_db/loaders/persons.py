@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional
 
 import pandas as pd
 from neo4j import Driver
+from tqdm import tqdm
 
 from .base import DataLoader
 
@@ -18,9 +19,9 @@ class PersonLoader(DataLoader):
     
     def load_data(self, data: pd.DataFrame, 
                   sample_size: Optional[int] = None, 
-                  batch_size: int = 50) -> Dict[str, Any]:
+                  batch_size: int = 25) -> Dict[str, Any]:
         """
-        Load persons with their diet preferences and allergies.
+        Load person data into the Neo4j database.
         
         Args:
             data: DataFrame with person data
@@ -33,22 +34,23 @@ class PersonLoader(DataLoader):
         if not self.driver:
             return {"status": "error", "error": "Neo4j driver not set. Call set_driver() first."}
         
-        # Sample if needed
+        # Sample if needed to avoid processing too much data at once
         if sample_size and len(data) > sample_size:
             data = data.sample(sample_size, random_state=42)
         
         # Create batches for efficient loading
         batches = self.batch_data(data, batch_size)
         
-        # Cypher query for batch loading
+        # Cypher query for batch loading persons
         query = """
         UNWIND $persons AS person
         MERGE (p:Person {id: person.id})
-        SET p.recommended_calories = person.calories,
-            p.recommended_protein = person.protein,
-            p.recommended_carbs = person.carbs,
-            p.recommended_fats = person.fats,
-            p.preferred_cuisine = person.cuisine,
+        SET p.recommended_calories = person.recommended_calories,
+            p.recommended_protein = person.recommended_protein,
+            p.recommended_carbs = person.recommended_carbs,
+            p.recommended_fats = person.recommended_fats,
+            p.preferred_cuisine = person.preferred_cuisine,
+            p.food_aversions = person.food_aversions,
             p.budget = person.budget
         
         WITH p, person
@@ -66,21 +68,24 @@ class PersonLoader(DataLoader):
         errors = []
         
         with self.driver.session() as session:
-            for batch_idx, batch in enumerate(batches):
+            # Add tqdm progress bar for batches
+            for batch_idx, batch in enumerate(tqdm(batches, desc="Loading persons", unit="batch")):
                 # Prepare data for this batch
                 persons = []
+                
                 for idx, row in batch.iterrows():
                     try:
                         person = {
                             "id": f"person_{idx}",
-                            "diet_preference": self.clean_text(row["Dietary_Habits"]) if pd.notna(row.get("Dietary_Habits", None)) else None,
-                            "allergy": self.clean_text(row["Allergies"]) if pd.notna(row.get("Allergies", None)) else None,
-                            "calories": self._extract_numeric(row, "Recommended_Calories"),
-                            "protein": self._extract_numeric(row, "Recommended_Protein"),
-                            "carbs": self._extract_numeric(row, "Recommended_Carbs"),
-                            "fats": self._extract_numeric(row, "Recommended_Fats"),
-                            "cuisine": self.clean_text(row["Preferred_Cuisine"]) if pd.notna(row.get("Preferred_Cuisine", None)) else None,
-                            "budget": "medium"  # Default budget, can be updated based on actual data
+                            "diet_preference": self.clean_text(row.get("Dietary_Habits", "")),
+                            "allergy": self.clean_text(row.get("Allergies", "")),
+                            "recommended_calories": self._extract_numeric(row, "Recommended_Calories"),
+                            "recommended_protein": self._extract_numeric(row, "Recommended_Protein"),
+                            "recommended_carbs": self._extract_numeric(row, "Recommended_Carbs"),
+                            "recommended_fats": self._extract_numeric(row, "Recommended_Fats"),
+                            "preferred_cuisine": self.clean_text(row.get("Preferred_Cuisine", "")),
+                            "food_aversions": self.clean_text(row.get("Food_Aversions", "")),
+                            "budget": "medium"  # Default budget level
                         }
                         persons.append(person)
                     except Exception as e:
@@ -88,7 +93,7 @@ class PersonLoader(DataLoader):
                 
                 # Execute the batch
                 try:
-                    if persons:
+                    if persons:  # Only run if we have valid persons
                         session.run(query, persons=persons)
                         total_processed += len(persons)
                 except Exception as e:
