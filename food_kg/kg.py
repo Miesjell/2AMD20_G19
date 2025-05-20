@@ -1,0 +1,213 @@
+class FoodKnowledgeGraph:
+    """
+    Main class for managing the food knowledge graph.
+    
+    This class serves as the central coordinator for all interactions with the 
+    knowledge graph, including data loading, schema setup, relationship creation,
+    and query execution.
+    """
+
+    def __init__(
+        self,
+        uri: str = "bolt://localhost:7687",
+        user: str = "neo4j",
+        password: str = "password",
+        compose_file: str = "docker-compose.yml",
+    ):
+        """
+        Initialize the food knowledge graph manager.
+
+        Args:
+            uri: Neo4j connection URI
+            user: Neo4j username
+            password: Neo4j password
+            compose_file: Path to docker-compose.yml file
+        """
+        # Connection settings
+        self.uri = uri
+        self.user = user
+        self.password = password
+        self.compose_file = compose_file
+        self.connection = Neo4jConnection(uri, user, password)
+        
+        # Component initialization
+        self.schema = KnowledgeGraphSchema()
+        self.food_loader = FoodItemLoader()
+        self.recipe_loader = RecipeLoader()
+        self.person_loader = PersonLoader()
+        self.relationship_builder = RelationshipBuilder()
+        self.query_manager = QueryManager()
+        self.driver = None
+
+    def start_docker(self) -> bool:
+        """
+        Start the Neo4j Docker container.
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info("Starting Neo4j Docker container...")
+        return start_neo4j_docker(compose_file=self.compose_file)
+
+    def stop_docker(self) -> bool:
+        """
+        Stop the Neo4j Docker container.
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info("Stopping Neo4j Docker container...")
+        return stop_neo4j_docker(compose_file=self.compose_file)
+
+    def connect(self) -> bool:
+        """
+        Connect to the Neo4j database and initialize all components.
+
+        Returns:
+            bool: True if connection successful, False otherwise
+        """
+        logger.info(f"Connecting to Neo4j at {self.uri}...")
+        if self.connection.connect():
+            self.driver = self.connection.get_driver()
+
+            # Set driver in all components
+            self.schema.set_driver(self.driver)
+            self.food_loader.set_driver(self.driver)
+            self.recipe_loader.set_driver(self.driver)
+            self.person_loader.set_driver(self.driver)
+            self.relationship_builder.set_driver(self.driver)
+            self.query_manager.set_driver(self.driver)
+
+            return True
+        return False
+
+    def close(self) -> None:
+        """Close the Neo4j connection."""
+        if self.connection:
+            self.connection.close()
+
+    def setup_schema(self) -> Dict[str, Any]:
+        """
+        Set up the Neo4j schema with constraints and indexes.
+
+        Returns:
+            Dict with setup results
+        """
+        logger.info("Setting up schema (constraints and indexes)...")
+        return self.schema.setup_schema()
+
+    def load_data(
+        self, data_dir: str, sample_recipes: int = 1000, sample_persons: int = 1000
+    ) -> Dict[str, Any]:
+        """
+        Load all data into the knowledge graph.
+
+        Args:
+            data_dir: Directory containing data files
+            sample_recipes: Number of recipes to sample (to avoid memory issues)
+            sample_persons: Number of persons to sample
+
+        Returns:
+            Dict with load results
+        """
+        results = {}
+
+        # Load food data
+        logger.info("Loading food data...")
+        food_data_path = os.path.join(data_dir, "food_data.csv")
+        if os.path.exists(food_data_path):
+            food_df = pd.read_csv(food_data_path)
+            results["food_items"] = self.food_loader.load_data(food_df)
+        else:
+            logger.error(f"Food data file not found: {food_data_path}")
+            results["food_items"] = {"status": "error", "error": "File not found"}
+
+        # Load recipe data from full_format_recipes.json
+        logger.info("Loading recipes from full_format_recipes.json...")
+        recipes_json_path = os.path.join(data_dir, "full_format_recipes.json")
+        if os.path.exists(recipes_json_path):
+            try:
+                with open(recipes_json_path, "r") as f:
+                    recipes_data = json.load(f)
+                recipes_df = pd.DataFrame(recipes_data)
+                results["recipes_json"] = self.recipe_loader.load_data(
+                    recipes_df, "full_format_recipes", sample_size=sample_recipes
+                )
+            except Exception as e:
+                logger.error(f"Error loading recipes JSON: {e}")
+                results["recipes_json"] = {"status": "error", "error": str(e)}
+        else:
+            logger.error(f"Recipes JSON file not found: {recipes_json_path}")
+            results["recipes_json"] = {"status": "error", "error": "File not found"}
+
+        # Load recipe data from recipes.parquet
+        logger.info("Loading recipes from recipes.parquet...")
+        recipes_parquet_path = os.path.join(data_dir, "recipes.parquet")
+        if os.path.exists(recipes_parquet_path):
+            try:
+                recipes_df = pd.read_parquet(recipes_parquet_path)
+                results["recipes_parquet"] = self.recipe_loader.load_data(
+                    recipes_df, "recipes_parquet", sample_size=sample_recipes
+                )
+            except Exception as e:
+                logger.error(f"Error loading recipes parquet: {e}")
+                results["recipes_parquet"] = {"status": "error", "error": str(e)}
+        else:
+            logger.error(f"Recipes parquet file not found: {recipes_parquet_path}")
+            results["recipes_parquet"] = {"status": "error", "error": "File not found"}
+
+        # Load person data
+        logger.info("Loading person data...")
+        persons_path = os.path.join(data_dir, "personalized_diet_recommendations.csv")
+        if os.path.exists(persons_path):
+            try:
+                persons_df = pd.read_csv(persons_path)
+                results["persons"] = self.person_loader.load_data(
+                    persons_df, sample_size=sample_persons
+                )
+            except Exception as e:
+                logger.error(f"Error loading persons data: {e}")
+                results["persons"] = {"status": "error", "error": str(e)}
+        else:
+            logger.error(f"Persons data file not found: {persons_path}")
+            results["persons"] = {"status": "error", "error": "File not found"}
+
+        return results
+
+    def create_relationships(self) -> Dict[str, Any]:
+        """
+        Create relationships between entities in the graph.
+
+        Returns:
+            Dict with relationship creation results
+        """
+        logger.info("Creating relationships between entities...")
+        return self.relationship_builder.create_relationships()
+
+    def run_queries(self) -> Dict[str, pd.DataFrame]:
+        """
+        Run predefined queries on the knowledge graph.
+
+        Returns:
+            Dict with query results as DataFrames
+        """
+        logger.info("Running queries to verify data...")
+
+        results = {
+            "node_counts": self.query_manager.count_nodes_by_type(),
+            "allergens": self.query_manager.find_allergens_and_causes(),
+            "diet_preferences": self.query_manager.find_diet_preferences(),
+            "recipes": self.query_manager.find_recipes_with_ingredients(),
+            "recommendations": self.query_manager.find_recommended_recipes(),
+        }
+
+        return results
+
+    def get_visualization_queries(self) -> List[Dict[str, str]]:
+        """
+        Get visualization queries for Neo4j Browser.
+
+        Returns:
+            List of visualization queries
+        """
+        return self.query_manager.get_visualization_queries()
