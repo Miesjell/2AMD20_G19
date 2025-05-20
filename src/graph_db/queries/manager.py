@@ -101,7 +101,7 @@ class QueryManager:
             DataFrame with diet preferences and follower counts
         """
         query = """
-        MATCH (p:Person)-[:FOLLOWS]->(d:DietPreference)
+        MATCH (p:Person)-[:HAS_DIETARY_PREFERENCE]->(d:DietPreference)
         RETURN d.name AS DietPreference, count(p) AS Followers
         ORDER BY Followers DESC
         """
@@ -188,7 +188,7 @@ class QueryManager:
                 "title": "Diet preferences",
                 "description": "View dietary preferences and people who follow them",
                 "query": """
-                MATCH (p:Person)-[:FOLLOWS]->(d:DietPreference)
+                MATCH (p:Person)-[:HAS_DIETARY_PREFERENCE]->(d:DietPreference)
                 RETURN d, p
                 LIMIT 10
                 """

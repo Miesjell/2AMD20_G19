@@ -63,7 +63,7 @@ class PersonLoader(DataLoader):
         WITH p, person
         WHERE person.diet_preference IS NOT NULL
         MERGE (d:DietPreference {name: person.diet_preference})
-        MERGE (p)-[:FOLLOWS]->(d)
+        MERGE (p)-[:HAS_DIETARY_PREFERENCE]->(d)
         
         WITH p, person
         WHERE person.allergy IS NOT NULL
