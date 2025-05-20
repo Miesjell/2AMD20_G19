@@ -108,7 +108,7 @@ class RelationshipBuilder:
             "name": "recipe_recommendations",
             "description": "Generate personalized recipe recommendations based on diet and allergy",
             "query": """
-                MATCH (p:Person)-[:FOLLOWS]->(d:DietPreference)-[:INCLUDES]->(r:Recipe)
+                MATCH (p:Person)-[:HAS_DIETARY_PREFERENCE]->(d:DietPreference)-[:INCLUDES]->(r:Recipe)
                 WHERE (p.budget IS NULL OR r.price_range = p.budget OR r.price_range IS NULL)
                   AND NOT EXISTS {
                       MATCH (p)-[:HAS_ALLERGY]->(a:Allergy)<-[:MAY_CONTAIN_ALLERGEN]-(r)
