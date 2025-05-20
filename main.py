@@ -13,30 +13,12 @@ Example:
     python main.py --data-dir data --start-docker
 """
 
-import os
-import argparse
-import logging
 import sys
 import time
-from typing import Dict, Any, List
-from utils.helpers import print_browser_access_info
-from utils.helpers import parse_args
-from food_kg.kg import FoodKnowledgeGraph
-
-import pandas as pd
 import json
-
-from src.graph_db.neo4j.connection import (
-    Neo4jConnection,
-    start_neo4j_docker,
-    stop_neo4j_docker,
-)
-from src.graph_db.schema.definition import KnowledgeGraphSchema
-from src.graph_db.loaders.food_items import FoodItemLoader
-from src.graph_db.loaders.recipes import RecipeLoader
-from src.graph_db.loaders.persons import PersonLoader
-from src.graph_db.relationships import RelationshipBuilder
-from src.graph_db.queries.manager import QueryManager
+import logging
+from utils.helpers import print_browser_access_info, parse_args
+from food_kg.kg import FoodKnowledgeGraph
 
 
 # Configure logging

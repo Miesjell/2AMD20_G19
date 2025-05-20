@@ -1,3 +1,23 @@
+import os
+import json
+import time
+import logging
+from typing import Dict, Any, List
+
+import pandas as pd
+
+# Neo4j connection
+from src.graph_db.neo4j.connection import Neo4jConnection, start_neo4j_docker, stop_neo4j_docker
+
+# Schema and components
+from src.graph_db.schema.definition import KnowledgeGraphSchema
+from src.graph_db.loaders.food_items import FoodItemLoader
+from src.graph_db.loaders.recipes import RecipeLoader
+from src.graph_db.loaders.persons import PersonLoader
+from src.graph_db.relationships import RelationshipBuilder
+from src.graph_db.queries.manager import QueryManager
+
+
 class FoodKnowledgeGraph:
     """
     Main class for managing the food knowledge graph.
@@ -13,6 +33,7 @@ class FoodKnowledgeGraph:
         user: str = "neo4j",
         password: str = "password",
         compose_file: str = "docker-compose.yml",
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize the food knowledge graph manager.
@@ -28,6 +49,7 @@ class FoodKnowledgeGraph:
         self.user = user
         self.password = password
         self.compose_file = compose_file
+        self.logger = logger or logging.getLogger(__name__)
         self.connection = Neo4jConnection(uri, user, password)
         
         # Component initialization
@@ -46,7 +68,7 @@ class FoodKnowledgeGraph:
         Returns:
             bool: True if successful, False otherwise
         """
-        logger.info("Starting Neo4j Docker container...")
+        self.logger.info("Starting Neo4j Docker container...")
         return start_neo4j_docker(compose_file=self.compose_file)
 
     def stop_docker(self) -> bool:
@@ -56,7 +78,7 @@ class FoodKnowledgeGraph:
         Returns:
             bool: True if successful, False otherwise
         """
-        logger.info("Stopping Neo4j Docker container...")
+        self.logger.info("Stopping Neo4j Docker container...")
         return stop_neo4j_docker(compose_file=self.compose_file)
 
     def connect(self) -> bool:
@@ -66,7 +88,7 @@ class FoodKnowledgeGraph:
         Returns:
             bool: True if connection successful, False otherwise
         """
-        logger.info(f"Connecting to Neo4j at {self.uri}...")
+        self.logger.info(f"Connecting to Neo4j at {self.uri}...")
         if self.connection.connect():
             self.driver = self.connection.get_driver()
 
@@ -93,7 +115,7 @@ class FoodKnowledgeGraph:
         Returns:
             Dict with setup results
         """
-        logger.info("Setting up schema (constraints and indexes)...")
+        self.logger.info("Setting up schema (constraints and indexes)...")
         return self.schema.setup_schema()
 
     def load_data(
@@ -113,17 +135,17 @@ class FoodKnowledgeGraph:
         results = {}
 
         # Load food data
-        logger.info("Loading food data...")
+        self.logger.info("Loading food data...")
         food_data_path = os.path.join(data_dir, "food_data.csv")
         if os.path.exists(food_data_path):
             food_df = pd.read_csv(food_data_path)
             results["food_items"] = self.food_loader.load_data(food_df)
         else:
-            logger.error(f"Food data file not found: {food_data_path}")
+            self.logger.error(f"Food data file not found: {food_data_path}")
             results["food_items"] = {"status": "error", "error": "File not found"}
 
         # Load recipe data from full_format_recipes.json
-        logger.info("Loading recipes from full_format_recipes.json...")
+        self.logger.info("Loading recipes from full_format_recipes.json...")
         recipes_json_path = os.path.join(data_dir, "full_format_recipes.json")
         if os.path.exists(recipes_json_path):
             try:
@@ -134,14 +156,14 @@ class FoodKnowledgeGraph:
                     recipes_df, "full_format_recipes", sample_size=sample_recipes
                 )
             except Exception as e:
-                logger.error(f"Error loading recipes JSON: {e}")
+                self.logger.error(f"Error loading recipes JSON: {e}")
                 results["recipes_json"] = {"status": "error", "error": str(e)}
         else:
-            logger.error(f"Recipes JSON file not found: {recipes_json_path}")
+            self.logger.error(f"Recipes JSON file not found: {recipes_json_path}")
             results["recipes_json"] = {"status": "error", "error": "File not found"}
 
         # Load recipe data from recipes.parquet
-        logger.info("Loading recipes from recipes.parquet...")
+        self.logger.info("Loading recipes from recipes.parquet...")
         recipes_parquet_path = os.path.join(data_dir, "recipes.parquet")
         if os.path.exists(recipes_parquet_path):
             try:
@@ -150,14 +172,14 @@ class FoodKnowledgeGraph:
                     recipes_df, "recipes_parquet", sample_size=sample_recipes
                 )
             except Exception as e:
-                logger.error(f"Error loading recipes parquet: {e}")
+                self.logger.error(f"Error loading recipes parquet: {e}")
                 results["recipes_parquet"] = {"status": "error", "error": str(e)}
         else:
-            logger.error(f"Recipes parquet file not found: {recipes_parquet_path}")
+            self.logger.error(f"Recipes parquet file not found: {recipes_parquet_path}")
             results["recipes_parquet"] = {"status": "error", "error": "File not found"}
 
         # Load person data
-        logger.info("Loading person data...")
+        self.logger.info("Loading person data...")
         persons_path = os.path.join(data_dir, "personalized_diet_recommendations.csv")
         if os.path.exists(persons_path):
             try:
@@ -166,10 +188,10 @@ class FoodKnowledgeGraph:
                     persons_df, sample_size=sample_persons
                 )
             except Exception as e:
-                logger.error(f"Error loading persons data: {e}")
+                self.logger.error(f"Error loading persons data: {e}")
                 results["persons"] = {"status": "error", "error": str(e)}
         else:
-            logger.error(f"Persons data file not found: {persons_path}")
+            self.logger.error(f"Persons data file not found: {persons_path}")
             results["persons"] = {"status": "error", "error": "File not found"}
 
         return results
@@ -181,7 +203,7 @@ class FoodKnowledgeGraph:
         Returns:
             Dict with relationship creation results
         """
-        logger.info("Creating relationships between entities...")
+        self.logger.info("Creating relationships between entities...")
         return self.relationship_builder.create_relationships()
 
     def run_queries(self) -> Dict[str, pd.DataFrame]:
@@ -191,7 +213,7 @@ class FoodKnowledgeGraph:
         Returns:
             Dict with query results as DataFrames
         """
-        logger.info("Running queries to verify data...")
+        self.logger.info("Running queries to verify data...")
 
         results = {
             "node_counts": self.query_manager.count_nodes_by_type(),

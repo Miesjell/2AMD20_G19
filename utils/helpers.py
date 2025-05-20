@@ -1,3 +1,5 @@
+import argparse
+
 def print_browser_access_info(user: str, password: str) -> None:
     """
     Print information about how to access the Neo4j Browser.
