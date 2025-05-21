@@ -42,6 +42,8 @@ class RecipeRecommendationDashboard:
             st.session_state.diet_preferences = []
         if 'allergies' not in st.session_state:
             st.session_state.allergies = []
+        if 'meal_types' not in st.session_state:
+            st.session_state.meal_types = []
         if 'favorite_recipes' not in st.session_state:
             st.session_state.favorite_recipes = []
         if 'user_id' not in st.session_state:
@@ -72,6 +74,11 @@ class RecipeRecommendationDashboard:
     def allergies(self):
         """Get allergies from session state."""
         return st.session_state.allergies
+    
+    @property
+    def meal_types(self):
+        """Get meal types from session state."""
+        return st.session_state.meal_types
         
     def connect_to_database(self):
         """Establish connection to the Neo4j database."""
@@ -90,9 +97,10 @@ class RecipeRecommendationDashboard:
                 st.session_state.query_manager = QueryManager(connection.get_driver())
                 st.session_state.connected = True
                 
-                # Load diet preferences and allergies
+                # Load diet preferences, allergies, and meal types
                 self._load_diet_preferences()
                 self._load_allergies()
+                self._load_meal_types()
                 return True
             return False
         except Exception as e:
@@ -168,6 +176,37 @@ class RecipeRecommendationDashboard:
                 "Shellfish", "Soy", "Wheat", "Gluten", "Sesame"
             ]
     
+    def _load_meal_types(self):
+        """Load available meal types from the database."""
+        if not st.session_state.connected:
+            return
+        
+        try:
+            # Direct query to get meal types
+            query = """
+            MATCH (m:MealType)
+            RETURN DISTINCT m.name AS MealType
+            ORDER BY m.name
+            """
+            
+            df = st.session_state.connection.execute_query_to_df(query, {})
+            
+            if df.empty:
+                # Fallback to standard meal types
+                st.session_state.meal_types = [
+                    "Breakfast", "Lunch", "Dinner", "Drink", "Other"
+                ]
+                st.sidebar.warning("No meal types found in database, using defaults")
+            else:
+                st.session_state.meal_types = df["MealType"].tolist()
+                
+        except Exception as e:
+            st.error(f"Error loading meal types: {e}")
+            # Fallback to standard meal types
+            st.session_state.meal_types = [
+                "Breakfast", "Lunch", "Dinner", "Drink", "Other"
+            ]
+    
     def find_recipes_for_diet(self, diet_preference: str, limit: int = 10) -> pd.DataFrame:
         """Find recipes suitable for a specific diet preference."""
         if not st.session_state.connected:
@@ -216,10 +255,25 @@ class RecipeRecommendationDashboard:
         df = st.session_state.connection.execute_query_to_df(query, {"recipe_name": recipe_name})
         return df["Ingredient"].tolist() if not df.empty else []
     
+    def find_recipes_by_meal_type(self, meal_type: str, limit: int = 10) -> pd.DataFrame:
+        """Find recipes based on meal type."""
+        if not st.session_state.connected:
+            return pd.DataFrame()
+        
+        query = f"""
+        MATCH (r:Recipe)-[:IS_TYPE]->(:MealType {{name: $meal_type}})
+        RETURN r.name AS Recipe, r.calories AS Calories, 
+               r.preparation_description AS Preparation
+        LIMIT {limit}
+        """
+        
+        return st.session_state.connection.execute_query_to_df(query, {"meal_type": meal_type})
+    
     def find_personalized_recipes(
         self, 
         diet_preferences: List[str], 
         allergies: List[str],
+        meal_type: Optional[str] = None,
         min_calories: Optional[int] = None,
         max_calories: Optional[int] = None,
         limit: int = 10
@@ -229,6 +283,17 @@ class RecipeRecommendationDashboard:
         
         This is the main recommendation function that combines dietary preferences
         and allergy restrictions to find suitable recipes.
+        
+        Args:
+            diet_preferences: List of diet preference names
+            allergies: List of allergy names to avoid
+            meal_type: Optional meal type filter (breakfast, lunch, dinner, etc.)
+            min_calories: Optional minimum calorie count
+            max_calories: Optional maximum calorie count
+            limit: Maximum number of recipes to return
+            
+        Returns:
+            DataFrame with matched recipes
         """
         if not st.session_state.connected:
             return pd.DataFrame()
@@ -255,6 +320,16 @@ class RecipeRecommendationDashboard:
             diet_condition = f"""
             AND {" AND ".join(include_conditions)}
             AND {" AND ".join(exclude_conditions)}
+            """
+        
+        # Meal type condition
+        meal_type_condition = ""
+        if meal_type and meal_type != "All Types":
+            params["meal_type"] = meal_type
+            meal_type_condition = """
+            AND EXISTS {
+                MATCH (r)-[:IS_TYPE]->(:MealType {name: $meal_type})
+            }
             """
         
         # Allergy conditions - updated for matching allergy relationships
@@ -298,6 +373,7 @@ class RecipeRecommendationDashboard:
         MATCH (r:Recipe)
         WHERE true
         {diet_condition}
+        {meal_type_condition}
         {allergy_condition}
         {calorie_condition}
         RETURN r.name AS Recipe, r.calories AS Calories, 
@@ -486,6 +562,13 @@ class RecipeRecommendationDashboard:
                     options=self.allergies
                 )
             
+            # Meal type filter
+            st.subheader("Meal Type")
+            selected_meal_type = st.selectbox(
+                "Filter by meal type (optional):",
+                options=["All Types"] + self.meal_types
+            )
+            
             # Additional filters
             st.subheader("Additional Filters")
             col1, col2 = st.columns(2)
@@ -516,6 +599,7 @@ class RecipeRecommendationDashboard:
                     recipes_df = self.find_personalized_recipes(
                         diet_preferences=selected_diets,
                         allergies=selected_allergies,
+                        meal_type=selected_meal_type if selected_meal_type != "All Types" else None,
                         min_calories=min_cal,
                         max_calories=max_cal,
                         limit=num_recommendations

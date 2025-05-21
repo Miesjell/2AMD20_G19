@@ -62,6 +62,10 @@ class KnowledgeGraphSchema:
                 "CREATE CONSTRAINT IF NOT EXISTS FOR (d:DietPreference) REQUIRE d.name IS UNIQUE",
                 "DietPreference.name uniqueness constraint",
             ),
+            (
+                "CREATE CONSTRAINT IF NOT EXISTS FOR (i:Ingredient) REQUIRE i.name IS UNIQUE",
+                "Ingredient.name uniqueness constraint",
+            ),
         ]
 
         results = []
@@ -102,6 +106,10 @@ class KnowledgeGraphSchema:
             (
                 "CREATE INDEX IF NOT EXISTS FOR (a:Allergy) ON (a.name)",
                 "Allergy.name index",
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name)",
+                "Ingredient.name index",
             ),
         ]
 

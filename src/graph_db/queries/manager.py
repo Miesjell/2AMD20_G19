@@ -256,3 +256,23 @@ class QueryManager:
         LIMIT {limit}
         """
         return self._execute_query(query, {"allergen_name": allergen_name})
+    
+    def find_recipes_by_meal_type(self, meal_type: str, limit: int = 10) -> pd.DataFrame:
+        """
+        Find recipes based on meal type (breakfast, lunch, dinner, drink, other).
+        
+        Args:
+            meal_type: The meal type to filter by
+            limit: Number of results to return
+            
+        Returns:
+            DataFrame with recipes of the specified meal type
+        """
+        query = f"""
+        MATCH (r:Recipe)-[:IS_TYPE]->(:MealType {{name: $meal_type}})
+        RETURN r.name AS Recipe, r.calories AS Calories,
+               r.preparation_description AS Preparation
+        ORDER BY r.calories ASC
+        LIMIT {limit}
+        """
+        return self._execute_query(query, {"meal_type": meal_type})
