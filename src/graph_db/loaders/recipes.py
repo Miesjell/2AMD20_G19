@@ -47,51 +47,10 @@ class RecipeLoader(DataLoader):
             data = data.sample(sample_size, random_state=42)
 
         try:
-            # Prepare data
-            df = data.copy()
-            df["id"] = [f"{source_name}_{i}" for i in df.index]
-            df["source"] = source_name
-
-            # Extract basic recipe information with fallbacks
-            df["name"] = df.get("title", df.get("Name", pd.Series([f"Recipe-{i}" for i in df.index])))
-            df["name"] = df["name"].apply(lambda x: self.clean_text(str(x)) if pd.notna(x) else f"Recipe-{np.random.randint(10000)}")
-            
-            df["description"] = df.get("desc", df.get("Description", ""))
-            # Fix for handling arrays - check and handle arrays specifically
-            if "description" in df.columns:
-                df["description"] = df["description"].apply(
-                    lambda x: self.clean_text(str(x)) if pd.notna(x) and not isinstance(x, (list, np.ndarray)) 
-                    else self.clean_text(str(x[0])) if pd.notna(x) and isinstance(x, (list, np.ndarray)) and len(x) > 0
-                    else ""
-                )
-            
-            # Handle RecipeInstructions which could be an array
-            if "RecipeInstructions" in df.columns:
-                df["preparation"] = df["RecipeInstructions"].apply(
-                    lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
-                    else self.clean_text(str(x)) if pd.notna(x)
-                    else ""
-                )
-            elif "directions" in df.columns:
-                df["preparation"] = df["directions"].apply(
-                    lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
-                    else self.clean_text(str(x)) if pd.notna(x)
-                    else ""
-                )
-            else:
-                df["preparation"] = ""
-
-            # Handle numeric fields with better error handling
-            for col, new in [("calories", "calories"), ("fat", "fat"), ("protein", "protein"), ("sodium", "sodium")]:
-                try:
-                    if col in df.columns:
-                        df[new] = pd.to_numeric(df[col], errors="coerce")
-                    else:
-                        # Create columns with default values if they don't exist
-                        df[new] = None
-                except Exception as e:
-                    self.logger.warning(f"Error processing column {col}: {str(e)}")
-                    df[new] = None
+            df = self._prepare_basic_info(data, source_name)
+            df = self._clean_text_fields(df)
+            df = self._extract_preparation(df)
+            df = self._handle_numerical_fields(df)
 
             # Extract ingredients with improved handling
             df["ingredients"] = df.apply(self._extract_recipe_ingredients, axis=1)
@@ -109,12 +68,7 @@ class RecipeLoader(DataLoader):
             batches = self.batch_data(df, batch_size)
 
             # Create constraints and indexes if needed
-            setup_query = """
-            CREATE CONSTRAINT IF NOT EXISTS FOR (r:Recipe) REQUIRE r.id IS UNIQUE;
-            CREATE CONSTRAINT IF NOT EXISTS FOR (i:Ingredient) REQUIRE i.name IS UNIQUE;
-            CREATE INDEX IF NOT EXISTS FOR (r:Recipe) ON (r.name);
-            CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name);
-            """
+            setup_query = self._setup_constraints()
             
             # Query for creating recipes and ingredients
             query = """
@@ -206,6 +160,62 @@ class RecipeLoader(DataLoader):
                 "total_processed": 0,
                 "total_records": len(data)
             }
+
+    def _prepare_basic_info(self, data: pd.DataFrame, source_name: str) -> pd.DataFrame:
+        df = data.copy()
+        df["id"] = [f"{source_name}_{i}" for i in df.index]
+        df["source"] = source_name
+        return df
+
+    def _clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["name"] = df.get("title", df.get("Name", pd.Series([f"Recipe-{i}" for i in df.index])))
+        df["name"] = df["name"].apply(lambda x: self.clean_text(str(x)) if pd.notna(x) else f"Recipe-{np.random.randint(10000)}")
+
+        df["description"] = df.get("desc", df.get("Description", ""))
+        if "description" in df.columns:
+            df["description"] = df["description"].apply(
+                lambda x: self.clean_text(str(x)) if pd.notna(x) and not isinstance(x, (list, np.ndarray)) 
+                else self.clean_text(str(x[0])) if pd.notna(x) and isinstance(x, (list, np.ndarray)) and len(x) > 0
+                else ""
+            )
+        return df
+
+    def _extract_preparation(self, df: pd.DataFrame) -> pd.DataFrame:
+        if "RecipeInstructions" in df.columns:
+            df["preparation"] = df["RecipeInstructions"].apply(
+                lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
+                else self.clean_text(str(x)) if pd.notna(x)
+                else ""
+            )
+        elif "directions" in df.columns:
+            df["preparation"] = df["directions"].apply(
+                lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
+                else self.clean_text(str(x)) if pd.notna(x)
+                else ""
+            )
+        else:
+            df["preparation"] = ""
+        return df
+
+    def _handle_numerical_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        for col, new in [("calories", "calories"), ("fat", "fat"), ("protein", "protein"), ("sodium", "sodium")]:
+            try:
+                if col in df.columns:
+                    df[new] = pd.to_numeric(df[col], errors="coerce")
+                else:
+                    df[new] = None
+            except Exception as e:
+                self.logger.warning(f"Error processing column {col}: {str(e)}")
+                df[new] = None
+        return df
+
+    def _setup_constraints(self) -> str:
+        return """
+        CREATE CONSTRAINT IF NOT EXISTS FOR (r:Recipe) REQUIRE r.id IS UNIQUE;
+        CREATE CONSTRAINT IF NOT EXISTS FOR (i:Ingredient) REQUIRE i.name IS UNIQUE;
+        CREATE INDEX IF NOT EXISTS FOR (r:Recipe) ON (r.name);
+        CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name);
+        """
 
     def _extract_recipe_ingredients(self, row: pd.Series) -> List[str]:
         """
