@@ -134,65 +134,58 @@ class FoodKnowledgeGraph:
         """
         results = {}
 
-        # Load food data
+        def try_load_file(path, loader_fn, key, **kwargs):
+            if os.path.exists(path):
+                try:
+                    if path.endswith(".json"):
+                        with open(path, "r") as f:
+                            df = pd.DataFrame(json.load(f))
+                    elif path.endswith(".parquet"):
+                        df = pd.read_parquet(path)
+                    elif path.endswith(".csv"):
+                        df = pd.read_csv(path)
+                    else:
+                        raise ValueError(f"Unsupported file type: {path}")
+                    results[key] = loader_fn(df, **kwargs)
+                except Exception as e:
+                    self.logger.error(f"Error loading {key} from {path}: {e}")
+                    results[key] = {"status": "error", "error": str(e)}
+            else:
+                self.logger.error(f"{key.capitalize()} file not found: {path}")
+                results[key] = {"status": "error", "error": "File not found"}
+
         self.logger.info("Loading food data...")
-        food_data_path = os.path.join(data_dir, "food_data.csv")
-        if os.path.exists(food_data_path):
-            food_df = pd.read_csv(food_data_path)
-            results["food_items"] = self.food_loader.load_data(food_df)
-        else:
-            self.logger.error(f"Food data file not found: {food_data_path}")
-            results["food_items"] = {"status": "error", "error": "File not found"}
+        try_load_file(
+            os.path.join(data_dir, "food_data.csv"),
+            self.food_loader.load_data,
+            "food_items"
+        )
 
-        # Load recipe data from full_format_recipes.json
         self.logger.info("Loading recipes from full_format_recipes.json...")
-        recipes_json_path = os.path.join(data_dir, "full_format_recipes.json")
-        if os.path.exists(recipes_json_path):
-            try:
-                with open(recipes_json_path, "r") as f:
-                    recipes_data = json.load(f)
-                recipes_df = pd.DataFrame(recipes_data)
-                results["recipes_json"] = self.recipe_loader.load_data(
-                    recipes_df, "full_format_recipes", sample_size=sample_recipes
-                )
-            except Exception as e:
-                self.logger.error(f"Error loading recipes JSON: {e}")
-                results["recipes_json"] = {"status": "error", "error": str(e)}
-        else:
-            self.logger.error(f"Recipes JSON file not found: {recipes_json_path}")
-            results["recipes_json"] = {"status": "error", "error": "File not found"}
+        try_load_file(
+            os.path.join(data_dir, "full_format_recipes.json"),
+            self.recipe_loader.load_data,
+            "recipes_json",
+            source_name="full_format_recipes",
+            sample_size=sample_recipes
+        )
 
-        # Load recipe data from recipes.parquet
         self.logger.info("Loading recipes from recipes.parquet...")
-        recipes_parquet_path = os.path.join(data_dir, "recipes.parquet")
-        if os.path.exists(recipes_parquet_path):
-            try:
-                recipes_df = pd.read_parquet(recipes_parquet_path)
-                results["recipes_parquet"] = self.recipe_loader.load_data(
-                    recipes_df, "recipes_parquet", sample_size=sample_recipes
-                )
-            except Exception as e:
-                self.logger.error(f"Error loading recipes parquet: {e}")
-                results["recipes_parquet"] = {"status": "error", "error": str(e)}
-        else:
-            self.logger.error(f"Recipes parquet file not found: {recipes_parquet_path}")
-            results["recipes_parquet"] = {"status": "error", "error": "File not found"}
+        try_load_file(
+            os.path.join(data_dir, "recipes.parquet"),
+            self.recipe_loader.load_data,
+            "recipes_parquet",
+            source_name="recipes_parquet",
+            sample_size=sample_recipes
+        )
 
-        # Load person data
         self.logger.info("Loading person data...")
-        persons_path = os.path.join(data_dir, "personalized_diet_recommendations.csv")
-        if os.path.exists(persons_path):
-            try:
-                persons_df = pd.read_csv(persons_path)
-                results["persons"] = self.person_loader.load_data(
-                    persons_df, sample_size=sample_persons
-                )
-            except Exception as e:
-                self.logger.error(f"Error loading persons data: {e}")
-                results["persons"] = {"status": "error", "error": str(e)}
-        else:
-            self.logger.error(f"Persons data file not found: {persons_path}")
-            results["persons"] = {"status": "error", "error": "File not found"}
+        try_load_file(
+            os.path.join(data_dir, "personalized_diet_recommendations.csv"),
+            self.person_loader.load_data,
+            "persons",
+            sample_size=sample_persons
+        )
 
         return results
 
