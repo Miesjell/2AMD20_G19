@@ -91,7 +91,10 @@ class FoodKnowledgeGraph:
         self.logger.info(f"Connecting to Neo4j at {self.uri}...")
         if self.connection.connect():
             self.driver = self.connection.get_driver()
-
+            
+            # reset database on start
+            # kg.reset_database() 
+            
             # Set driver in all components
             self.schema.set_driver(self.driver)
             self.food_loader.set_driver(self.driver)
@@ -226,3 +229,9 @@ class FoodKnowledgeGraph:
             List of visualization queries
         """
         return self.query_manager.get_visualization_queries()
+    
+    def reset_database(self) -> None:
+    """Delete all nodes and relationships in the database."""
+    self.logger.info("Resetting Neo4j database...")
+    with self.driver.session() as session:
+        session.run("MATCH (n) DETACH DELETE n")
