@@ -163,6 +163,7 @@ class RecipeLoader(DataLoader):
 
     def _prepare_basic_info(self, data: pd.DataFrame, source_name: str) -> pd.DataFrame:
         df = data.copy()
+        df.columns = df.columns.str.strip()
         df["id"] = [f"{source_name}_{i}" for i in df.index]
         df["source"] = source_name
         return df
@@ -198,10 +199,12 @@ class RecipeLoader(DataLoader):
         return df
 
     def _extract_nutrition(self, df: pd.DataFrame) -> pd.DataFrame:
-        col_map = {c.lower(): c for c in df.columns}
+        # Normalize column names: lowercase + strip whitespace
+        col_map = {c.strip().lower(): c for c in df.columns}
         for col in ["calories", "fat", "protein", "sodium"]:
             src = col_map.get(col)
             df[col] = pd.to_numeric(df[src], errors="coerce") if src else None
+            
         return df
 
     def _setup_constraints(self) -> List[str]:
