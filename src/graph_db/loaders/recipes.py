@@ -45,7 +45,6 @@ class RecipeLoader(DataLoader):
 
         if sample_size and len(data) > sample_size:
             data = data.sample(sample_size, random_state=42)
-
         try:
             df = self._prepare_basic_info(data, source_name)
             df = self._clean_text_fields(df)
@@ -99,7 +98,8 @@ class RecipeLoader(DataLoader):
             with self.driver.session() as session:
                 # First run setup query to ensure constraints and indexes
                 try:
-                    session.run(setup_query)
+                    for stmt in self._setup_constraints():
+                        session.run(stmt)
                     self.logger.info("Created necessary constraints and indexes")
                 except Exception as e:
                     self.logger.warning(f"Could not create constraints: {str(e)}")
@@ -209,13 +209,13 @@ class RecipeLoader(DataLoader):
                 df[new] = None
         return df
 
-    def _setup_constraints(self) -> str:
-        return """
-        CREATE CONSTRAINT IF NOT EXISTS FOR (r:Recipe) REQUIRE r.id IS UNIQUE;
-        CREATE CONSTRAINT IF NOT EXISTS FOR (i:Ingredient) REQUIRE i.name IS UNIQUE;
-        CREATE INDEX IF NOT EXISTS FOR (r:Recipe) ON (r.name);
-        CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name);
-        """
+    def _setup_constraints(self) -> List[str]:
+        return [
+            "CREATE CONSTRAINT IF NOT EXISTS FOR (r:Recipe) REQUIRE r.id IS UNIQUE",
+            "CREATE CONSTRAINT IF NOT EXISTS FOR (i:Ingredient) REQUIRE i.name IS UNIQUE",
+            "CREATE INDEX IF NOT EXISTS FOR (r:Recipe) ON (r.name)",
+            "CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name)",
+        ]
 
     def _extract_recipe_ingredients(self, row: pd.Series) -> List[str]:
         """
