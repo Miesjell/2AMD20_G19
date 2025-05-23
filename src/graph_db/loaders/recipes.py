@@ -205,12 +205,15 @@ class RecipeLoader(DataLoader):
         return df
 
     def _extract_nutrition(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Normalize column names: lowercase + strip whitespace
+        # Normalize column name mapping
         col_map = {c.strip().lower(): c for c in df.columns}
+
         for col in ["calories", "fat", "protein", "sodium"]:
             src = col_map.get(col)
-            df[col] = pd.to_numeric(df[src], errors="coerce") if src else None
-            
+            if src:
+                df[col] = pd.to_numeric(df[src], errors="coerce")
+            else:
+                df[col] = None  # fill with null if missing
         return df
 
     def _setup_constraints(self) -> List[str]:
