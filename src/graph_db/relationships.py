@@ -186,90 +186,27 @@ class RelationshipBuilder:
                 MERGE (p)-[:RECOMMENDED_RECIPE]->(recipe)
             """
         }
-
     def _meal_type_categorization(self) -> Dict[str, str]:
-        """Categorize recipes into meal types based on their names."""
+        """Create MealType nodes and link recipes using the precomputed `meal_type` property."""
         return {
             "name": "meal_type_categorization",
-            "description": "Categorize recipes into meal types (breakfast, lunch, dinner, drink, other)",
+            "description": "Link each recipe to its corresponding MealType based on preprocessed `meal_type` property.",
             "query": """
-                // First, create the meal type nodes if they don't exist
-                MERGE (breakfast:MealType {name: 'Breakfast'})
-                MERGE (lunch:MealType {name: 'Lunch'})
-                MERGE (dinner:MealType {name: 'Dinner'})
-                MERGE (drink:MealType {name: 'Drink'})
-                MERGE (other:MealType {name: 'Other'})
+                // Create meal type nodes
+                FOREACH (name IN ['Breakfast', 'Lunch', 'Dinner', 'Drink', 'Other'] |
+                    MERGE (:MealType {name: name})
+                )
                 
-                // Use WITH to carry over the meal type nodes
-                WITH breakfast, lunch, dinner, drink, other
-                
-                // Categorize breakfast foods
+                // Match recipes with a known meal_type
                 MATCH (r:Recipe)
-                WHERE toLower(r.name) CONTAINS 'breakfast' OR 
-                      toLower(r.name) CONTAINS 'pancake' OR 
-                      toLower(r.name) CONTAINS 'waffle' OR
-                      toLower(r.name) CONTAINS 'cereal' OR
-                      toLower(r.name) CONTAINS 'oatmeal' OR
-                      toLower(r.name) CONTAINS 'omelette' OR
-                      toLower(r.name) CONTAINS 'omelet' OR
-                      toLower(r.name) CONTAINS 'bacon' OR
-                      toLower(r.name) CONTAINS 'toast'
-                MERGE (r)-[:IS_TYPE]->(breakfast)
-                
-                // Pass all variables to the next query
-                WITH breakfast, lunch, dinner, drink, other
-                
-                // Categorize lunch foods
-                MATCH (r:Recipe)
-                WHERE toLower(r.name) CONTAINS 'lunch' OR 
-                      toLower(r.name) CONTAINS 'sandwich' OR 
-                      toLower(r.name) CONTAINS 'salad' OR
-                      toLower(r.name) CONTAINS 'wrap' OR
-                      toLower(r.name) CONTAINS 'soup'
-                MERGE (r)-[:IS_TYPE]->(lunch)
-                
-                // Pass all variables to the next query
-                WITH breakfast, lunch, dinner, drink, other
-                
-                // Categorize dinner foods
-                MATCH (r:Recipe)
-                WHERE toLower(r.name) CONTAINS 'dinner' OR 
-                      toLower(r.name) CONTAINS 'roast' OR 
-                      toLower(r.name) CONTAINS 'steak' OR
-                      toLower(r.name) CONTAINS 'pasta' OR
-                      toLower(r.name) CONTAINS 'casserole'
-                MERGE (r)-[:IS_TYPE]->(dinner)
-                
-                // Pass all variables to the next query
-                WITH breakfast, lunch, dinner, drink, other
-                
-                // Categorize drinks
-                MATCH (r:Recipe)
-                WHERE toLower(r.name) CONTAINS 'cocktail' OR 
-                      toLower(r.name) CONTAINS 'drink' OR 
-                      toLower(r.name) CONTAINS 'smoothie' OR
-                      toLower(r.name) CONTAINS 'juice' OR
-                      toLower(r.name) CONTAINS 'coffee' OR
-                      toLower(r.name) CONTAINS 'tea' OR
-                      toLower(r.name) CONTAINS 'wine' OR
-                      toLower(r.name) CONTAINS 'beer' OR
-                      toLower(r.name) CONTAINS 'liquor' OR
-                      toLower(r.name) CONTAINS 'whiskey' OR
-                      toLower(r.name) CONTAINS 'vodka'
-                MERGE (r)-[:IS_TYPE]->(drink)
-                
-                // Pass all variables to the next query
-                WITH breakfast, lunch, dinner, drink, other
-                
-                // Categorize remaining recipes as 'Other' if they have ingredients
-                MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
-                WHERE NOT EXISTS {
-                    MATCH (r)-[:IS_TYPE]->(:MealType)
-                }
-                WITH DISTINCT r, other
-                MERGE (r)-[:IS_TYPE]->(other)
+                WHERE r.meal_type IS NOT NULL
+
+                // Link recipe to its corresponding MealType
+                MATCH (m:MealType {name: r.meal_type})
+                MERGE (r)-[:IS_TYPE]->(m)
             """
         }
+
 
     def get_relationship_definitions(self) -> List[Dict[str, str]]:
         """Get all relationship definitions for documentation purposes."""

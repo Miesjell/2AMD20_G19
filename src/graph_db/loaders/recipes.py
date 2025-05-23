@@ -50,7 +50,7 @@ class RecipeLoader(DataLoader):
             df = self._clean_text_fields(df)
             df = self._extract_preparation(df)
             df = self._extract_nutrition(df)
-
+            df = self._assign_meal_type(df)
             # Extract ingredients with improved handling
             df["ingredients"] = df.apply(self._extract_recipe_ingredients, axis=1)
             
@@ -62,7 +62,7 @@ class RecipeLoader(DataLoader):
             ingredient_counts = df["ingredients"].apply(len)
             recipes_with_ingredients = df["ingredients"].apply(lambda x: len(x) > 0 and (len(x) > 1 or x[0] != "Unknown ingredient")).sum()
             recipes_without_ingredients = len(df) - recipes_with_ingredients
-
+            print(df.meal_type)
             # Create batches for processing
             batches = self.batch_data(df, batch_size)
 
@@ -82,6 +82,11 @@ class RecipeLoader(DataLoader):
                 r.sodium = CASE WHEN recipe.sodium IS NULL THEN 0 ELSE recipe.sodium END,
                 r.preparation_description = recipe.preparation,
                 r.price_range = recipe.price_range
+
+            WITH r, recipe
+            WHERE recipe.meal_type IS NOT NULL
+            MERGE (mt:MealType {name: recipe.meal_type})
+            MERGE (r)-[:IS_TYPE]->(mt)
 
             WITH r, recipe
             UNWIND recipe.ingredients AS ingredient
@@ -122,6 +127,7 @@ class RecipeLoader(DataLoader):
                                     "protein": float(row["protein"]) if pd.notna(row["protein"]) else None,
                                     "sodium": float(row["sodium"]) if pd.notna(row["sodium"]) else None,
                                     "price_range": row["price_range"],
+                                    "meal_type": row["meal_type"],
                                     "ingredients": [ing for ing in row["ingredients"] if ing and ing != "Unknown ingredient"]
                                 }
                                 records.append(record)
@@ -301,3 +307,25 @@ class RecipeLoader(DataLoader):
             ingredients = ["Unknown ingredient"]
             
         return ingredients
+    
+    
+    def _assign_meal_type(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Assign a meal type to each recipe based on keywords in the name.
+        Categories: Breakfast, Lunch, Dinner, Drink, Other
+        """
+        def categorize(name: str) -> str:
+            name = name.lower()
+            if any(k in name for k in ["breakfast", "pancake", "waffle", "cereal", "oatmeal", "omelet", "omelette", "bacon", "toast"]):
+                return "Breakfast"
+            if any(k in name for k in ["lunch", "sandwich", "salad", "wrap", "soup"]):
+                return "Lunch"
+            if any(k in name for k in ["dinner", "roast", "steak", "pasta", "casserole"]):
+                return "Dinner"
+            if any(k in name for k in ["cocktail", "drink", "smoothie", "juice", "coffee", "tea", "wine", "beer", "liquor", "whiskey", "vodka"]):
+                return "Drink"
+            return "Other"
+
+        df["meal_type"] = df["name"].apply(lambda x: categorize(str(x)))
+        return df
+    
