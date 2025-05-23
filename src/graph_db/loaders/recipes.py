@@ -49,7 +49,7 @@ class RecipeLoader(DataLoader):
             df = self._prepare_basic_info(data, source_name)
             df = self._clean_text_fields(df)
             df = self._extract_preparation(df)
-            df = self._handle_numerical_fields(df)
+            df = self._extract_nutrition(df)
 
             # Extract ingredients with improved handling
             df["ingredients"] = df.apply(self._extract_recipe_ingredients, axis=1)
@@ -170,8 +170,8 @@ class RecipeLoader(DataLoader):
     def _clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame:
         df["name"] = df.get("title", df.get("Name", pd.Series([f"Recipe-{i}" for i in df.index])))
         df["name"] = df["name"].apply(lambda x: self.clean_text(str(x)) if pd.notna(x) else f"Recipe-{np.random.randint(10000)}")
-
         df["description"] = df.get("desc", df.get("Description", ""))
+        
         if "description" in df.columns:
             df["description"] = df["description"].apply(
                 lambda x: self.clean_text(str(x)) if pd.notna(x) and not isinstance(x, (list, np.ndarray)) 
@@ -197,16 +197,11 @@ class RecipeLoader(DataLoader):
             df["preparation"] = ""
         return df
 
-    def _handle_numerical_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        for col, new in [("calories", "calories"), ("fat", "fat"), ("protein", "protein"), ("sodium", "sodium")]:
-            try:
-                if col in df.columns:
-                    df[new] = pd.to_numeric(df[col], errors="coerce")
-                else:
-                    df[new] = None
-            except Exception as e:
-                self.logger.warning(f"Error processing column {col}: {str(e)}")
-                df[new] = None
+    def _extract_nutrition(self, df: pd.DataFrame) -> pd.DataFrame:
+        col_map = {c.lower(): c for c in df.columns}
+        for col in ["calories", "fat", "protein", "sodium"]:
+            src = col_map.get(col)
+            df[col] = pd.to_numeric(df[src], errors="coerce") if src else None
         return df
 
     def _setup_constraints(self) -> List[str]:
