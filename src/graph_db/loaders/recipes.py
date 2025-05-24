@@ -62,7 +62,6 @@ class RecipeLoader(DataLoader):
             ingredient_counts = df["ingredients"].apply(len)
             recipes_with_ingredients = df["ingredients"].apply(lambda x: len(x) > 0 and (len(x) > 1 or x[0] != "Unknown ingredient")).sum()
             recipes_without_ingredients = len(df) - recipes_with_ingredients
-            print(df.meal_type)
             # Create batches for processing
             batches = self.batch_data(df, batch_size)
 
@@ -156,6 +155,7 @@ class RecipeLoader(DataLoader):
                 "total_records": len(df),
                 "recipes_with_ingredients": recipes_with_ingredients,
                 "recipes_without_ingredients": recipes_without_ingredients,
+                "data": df[['ingredients']],
                 "errors": errors[:10] if errors else []
             }
         except Exception as e:
