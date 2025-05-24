@@ -13,6 +13,7 @@ from src.graph_db.neo4j.connection import Neo4jConnection, start_neo4j_docker, s
 from src.graph_db.schema.definition import KnowledgeGraphSchema
 from src.graph_db.loaders.food_items import FoodItemLoader
 from src.graph_db.loaders.recipes import RecipeLoader
+from src.graph_db.loaders.price import PriceLoader
 from src.graph_db.loaders.persons import PersonLoader
 from src.graph_db.relationships import RelationshipBuilder
 from src.graph_db.queries.manager import QueryManager
@@ -57,6 +58,7 @@ class FoodKnowledgeGraph:
         self.food_loader = FoodItemLoader()
         self.recipe_loader = RecipeLoader()
         self.person_loader = PersonLoader()
+        self.price_loader = PriceLoader()
         self.relationship_builder = RelationshipBuilder()
         self.query_manager = QueryManager()
         self.driver = None
@@ -99,6 +101,7 @@ class FoodKnowledgeGraph:
             self.schema.set_driver(self.driver)
             self.food_loader.set_driver(self.driver)
             self.recipe_loader.set_driver(self.driver)
+            self.price_loader.set_driver(self.driver)
             self.person_loader.set_driver(self.driver)
             self.relationship_builder.set_driver(self.driver)
             self.query_manager.set_driver(self.driver)
@@ -188,6 +191,13 @@ class FoodKnowledgeGraph:
             self.person_loader.load_data,
             "persons",
             sample_size=sample_persons
+        )
+        
+        self.logger.info("Loading Price data...")
+        try_load_file(
+            os.path.join(data_dir, "groceries.csv"),
+            self.price_loader.load_data,
+            "food_items"
         )
 
         return results
