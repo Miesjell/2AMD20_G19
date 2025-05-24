@@ -3,13 +3,14 @@ Person loader for the knowledge graph.
 """
 
 from typing import Dict, Any, Optional
-
+from faker import Faker
 import pandas as pd
 from neo4j import Driver
 from tqdm import tqdm
 
 from .base import DataLoader
 
+faker = Faker('nl_NL')
 
 class PersonLoader(DataLoader):
     """Loader for persons and their diet/allergy relationships."""
@@ -52,7 +53,8 @@ class PersonLoader(DataLoader):
         query = """
         UNWIND $persons AS person
         MERGE (p:Person {id: person.id})
-        SET p.recommended_calories = person.recommended_calories,
+        SET p.name = person.name,
+            p.recommended_calories = person.recommended_calories,
             p.recommended_protein = person.recommended_protein,
             p.recommended_carbs = person.recommended_carbs,
             p.recommended_fats = person.recommended_fats,
@@ -81,10 +83,10 @@ class PersonLoader(DataLoader):
             ):
                 # Prepare data for this batch
                 persons = []
-
                 for idx, row in batch.iterrows():
                     try:
                         person = {
+                            "name": faker.name(),
                             "id": f"person_{idx}",
                             "diet_preference": self.clean_text(
                                 row.get("Dietary_Habits", "")

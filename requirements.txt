@@ -1,0 +1,5 @@
+neo4j
+streamlit
+faker
+numpy
+pandas
