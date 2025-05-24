@@ -42,7 +42,6 @@ class PriceLoader(DataLoader):
 
         # Clean column names
         df.columns = df.columns.str.lower().str.strip()
-
         if "product_name" not in df.columns or "price_current" not in df.columns:
             return {"status": "error", "error": "Missing required 'product_name' or 'price_current' column."}
 
@@ -63,30 +62,32 @@ class PriceLoader(DataLoader):
         processed_ingredient_names = set(processed_to_original.keys())
         self.logger.info(f"Processed {len(processed_ingredient_names)} ingredients from Neo4j.")
 
-        # Step 3: Extract matched ingredient from product names using regex
+        # Step 3: Match product names to processed ingredients (vectorized)
         pattern = r"\b(" + "|".join(re.escape(ingr) for ingr in processed_ingredient_names) + r")\b"
         df["matched_ingredient"] = df["product_name"].str.extract(pattern, expand=False)
 
         # Step 4: Map to original Neo4j node name
         df["original_ingredient"] = df["matched_ingredient"].map(processed_to_original)
-        filtered_df = df[df["original_ingredient"].notnull()].copy()
+        df = df[df["original_ingredient"].notnull()].copy()
 
-        if filtered_df.empty:
-            self.logger.warning("No matching ingredients found in Neo4j.")
+        # Step 5: Deduplicate to keep only the first match per ingredient
+        df = df.drop_duplicates(subset=["original_ingredient"], keep="first")
+
+        if df.empty:
+            self.logger.warning("No matching product names found for known ingredients.")
             return {"status": "success", "loaded": 0, "filtered_out": len(df)}
 
-        # Step 5: Batch insert prices using UNWIND
-        batch_data = filtered_df[["original_ingredient", "product_name", "price_current"]].to_dict("records")
+        batch_data = df[["original_ingredient", "product_name", "price_current"]].to_dict("records")
 
+        # Step 6: Batch insert using UNWIND
         with self.driver.session() as session:
             session.run(
                 """
                 UNWIND $batch AS row
                 MATCH (i:Ingredient {name: row.original_ingredient})
-                MERGE (i)-[:HAS_PRICE]->(:Price {
-                    source: row.product_name,
-                    price: row.price_current
-                })
+                MERGE (i)-[r:HAS_PRICE]->(p:Price)
+                SET p.price = row.price_current,
+                    p.source = row.product_name
                 """,
                 batch=batch_data
             )
