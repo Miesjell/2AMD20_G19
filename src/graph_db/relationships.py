@@ -186,6 +186,7 @@ class RelationshipBuilder:
                 MERGE (p)-[:RECOMMENDED_RECIPE]->(recipe)
             """
         }
+        
     def _meal_type_categorization(self) -> Dict[str, str]:
         """Create MealType nodes and link recipes using the precomputed `meal_type` property."""
         return {
@@ -196,7 +197,10 @@ class RelationshipBuilder:
                 FOREACH (name IN ['Breakfast', 'Lunch', 'Dinner', 'Drink', 'Other'] |
                     MERGE (:MealType {name: name})
                 )
-                
+
+                // Use WITH to separate FOREACH from next MATCH
+                WITH 1 as dummy
+
                 // Match recipes with a known meal_type
                 MATCH (r:Recipe)
                 WHERE r.meal_type IS NOT NULL
