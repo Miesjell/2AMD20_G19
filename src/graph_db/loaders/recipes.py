@@ -174,17 +174,13 @@ class RecipeLoader(DataLoader):
         df["source"] = source_name
         return df
 
-    def _clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame: 
         df["name"] = df.get("title", df.get("Name", pd.Series([f"Recipe-{i}" for i in df.index])))
         df["name"] = df["name"].apply(lambda x: self.clean_text(str(x)) if pd.notna(x) else f"Recipe-{np.random.randint(10000)}")
-        df["description"] = df.get("desc", df.get("Description", ""))
-        
-        if "description" in df.columns:
-            df["description"] = df["description"].apply(
-                lambda x: self.clean_text(str(x)) if pd.notna(x) and not isinstance(x, (list, np.ndarray)) 
-                else self.clean_text(str(x[0])) if pd.notna(x) and isinstance(x, (list, np.ndarray)) and len(x) > 0
-                else ""
-            )
+        df["description"] = df.get("desc", "")
+        df["description"] = df["description"].apply(
+            lambda x: self.clean_text(str(x)) if pd.notna(x) else ""
+        ) 
         return df
 
     def _extract_preparation(self, df: pd.DataFrame) -> pd.DataFrame:
