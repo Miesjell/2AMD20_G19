@@ -168,8 +168,8 @@ class RecipeLoader(DataLoader):
             }
 
     def _prepare_basic_info(self, data: pd.DataFrame, source_name: str) -> pd.DataFrame:
-        df = data.copy()
-        df.columns = df.columns.str.strip()
+        df = data.copy().dropna(how='all')
+        df.columns = df.columns.str.lower().str.strip()
         df["id"] = [f"{source_name}_{i}" for i in df.index]
         df["source"] = source_name
         return df
