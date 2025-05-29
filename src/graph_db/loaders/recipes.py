@@ -14,7 +14,6 @@ from neo4j import Driver
 from tqdm import tqdm
 from .base import DataLoader
 
-
 class RecipeLoader(DataLoader):
     """Loader for recipe data into the Neo4j knowledge graph."""
 
@@ -64,10 +63,8 @@ class RecipeLoader(DataLoader):
             recipes_without_ingredients = len(df) - recipes_with_ingredients
             # Create batches for processing
             batches = self.batch_data(df, batch_size)
-
             # Create constraints and indexes if needed
             setup_query = self._setup_constraints()
-            
             # Query for creating recipes and ingredients
             query = """
             UNWIND $recipes AS recipe
@@ -156,7 +153,8 @@ class RecipeLoader(DataLoader):
                 "recipes_with_ingredients": recipes_with_ingredients,
                 "recipes_without_ingredients": recipes_without_ingredients,
                 "data": df[['ingredients']],
-                "errors": errors[:10] if errors else []
+                "errors": errors[:10] if errors else [],
+                "df": df
             }
         except Exception as e:
             self.logger.error(f"Critical error in recipe loading: {str(e)}")
@@ -205,11 +203,29 @@ class RecipeLoader(DataLoader):
         col_map = {c.strip().lower(): c for c in df.columns}
 
         for col in ["calories", "fat", "protein", "sodium"]:
+            ["calories", "fatcontent", "proteincontent", "sodiumcontent"]
+        #     df[col].apply(
+        #     lambda x: self.clean_text(x) if pd.notna(x) else ""
+        # ) 
             src = col_map.get(col)
             if src:
                 df[col] = pd.to_numeric(df[src], errors="coerce")
             else:
                 df[col] = None  # fill with null if missing
+                
+                
+                
+        # attributes = ["calories", "fat", "protein", "sodium"]
+
+        # for attr in attributes:
+        #     # Try to find a column whose name contains the attribute substring
+        #     matching_col = next((col for col in df.columns if col.startswith(attr)), None)
+
+            
+        #     if matching_col:
+        #         df[attr] = df[matching_col].apply(lambda x: self.clean_text(x) if pd.notna(x) else "")
+        #     else:
+        #         df[attr] = ""  # or np.nan
         return df
 
     def _setup_constraints(self) -> List[str]:
