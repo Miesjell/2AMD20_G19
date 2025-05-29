@@ -233,25 +233,25 @@ class RecipeLoader(DataLoader):
         ingredients = []
         
         # Try to extract from RecipeIngredientParts first (most common in the dataset)
-        if "RecipeIngredientParts" in row.index:
+        if "recipeingredientparts" in row.index:
             try:
-                if isinstance(row["RecipeIngredientParts"], (list, np.ndarray)):
-                    for item in row["RecipeIngredientParts"]:
+                if isinstance(row["recipeingredientparts"], (list, np.ndarray)):
+                    for item in row["recipeingredientparts"]:
                         if isinstance(item, str) and item.strip():
                             ingredients.append(self.clean_text(item))
-                elif pd.notna(row["RecipeIngredientParts"]) and isinstance(row["RecipeIngredientParts"], str):
-                    if row["RecipeIngredientParts"].strip().startswith('[') and row["RecipeIngredientParts"].strip().endswith(']'):
+                elif pd.notna(row["recipeingredientparts"]) and isinstance(row["recipeingredientparts"], str):
+                    if row["recipeingredientparts"].strip().startswith('[') and row["recipeingredientparts"].strip().endswith(']'):
                         try:
-                            parts = json.loads(row["RecipeIngredientParts"])
+                            parts = json.loads(row["recipeingredientparts"])
                             if isinstance(parts, list):
                                 for part in parts:
                                     if part and isinstance(part, str):
                                         ingredients.append(self.clean_text(part))
                         except:
                             # If JSON parsing fails, treat as regular string
-                            ingredients.append(self.clean_text(row["RecipeIngredientParts"]))
+                            ingredients.append(self.clean_text(row["recipeingredientparts"]))
                     else:
-                        ingredients.append(self.clean_text(row["RecipeIngredientParts"]))
+                        ingredients.append(self.clean_text(row["recipeingredientparts"]))
             except Exception as e:
                 self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
         
