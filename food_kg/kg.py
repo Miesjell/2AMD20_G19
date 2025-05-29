@@ -194,11 +194,11 @@ class FoodKnowledgeGraph:
         )
         
         self.logger.info("Loading Price data...")
-        try_load_file(
-            os.path.join(data_dir, "groceries.csv"),
-            self.price_loader.load_data,
-            "food_items"
-        )
+        # try_load_file(
+        #     os.path.join(data_dir, "groceries.csv"),
+        #     self.price_loader.load_data,
+        #     "food_items"
+        # )
 
         return results
 
