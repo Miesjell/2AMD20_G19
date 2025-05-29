@@ -188,17 +188,17 @@ class RecipeLoader(DataLoader):
         return df
 
     def _extract_preparation(self, df: pd.DataFrame) -> pd.DataFrame:
-        if "RecipeInstructions" in df.columns:
-            df["preparation"] = df["RecipeInstructions"].apply(
-                lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
-                else self.clean_text(str(x)) if pd.notna(x)
-                else ""
-            )
-        elif "directions" in df.columns:
-            df["preparation"] = df["directions"].apply(
-                lambda x: " ".join([self.clean_text(str(item)) for item in x]) if isinstance(x, (list, np.ndarray))
-                else self.clean_text(str(x)) if pd.notna(x)
-                else ""
+        column = None
+        # should always be list form
+        for candidate in ["recipeinstructions", "directions"]:
+            if candidate in df.columns:
+                column = candidate
+                break
+
+        if column:
+            df["preparation"] = df[column].apply(
+                lambda x: " ".join(self.clean_text(str(item)) for item in x)
+                if isinstance(x, (list, np.ndarray)) else ""
             )
         else:
             df["preparation"] = ""
