@@ -51,7 +51,7 @@ class RecipeLoader(DataLoader):
                     .pipe(self._extract_preparation)
                     .pipe(self._extract_nutrition)
                     .pipe(self._assign_meal_type)
-                    .pipe(self._extract_recipe_ingredients)  # Clean and piped!
+                    .pipe(self._extract_recipe_ingredients)
             )
             
 
