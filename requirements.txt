@@ -4,3 +4,4 @@ faker
 numpy
 pandas
 tqdm
+plotly
