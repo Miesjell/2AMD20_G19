@@ -45,17 +45,15 @@ class RecipeLoader(DataLoader):
         if sample_size and len(data) > sample_size:
             data = data.sample(sample_size, random_state=42)
         try:
-            df = self._prepare_basic_info(data, source_name)
-            df = self._clean_text_fields(df)
-            df = self._extract_preparation(df)
-            df = self._extract_nutrition(df)
-            df = self._assign_meal_type(df)
-            # Extract ingredients with improved handling
-            df["ingredients"] = df.apply(self._extract_recipe_ingredients, axis=1)
+            df = (
+                self._prepare_basic_info(data, source_name)
+                    .pipe(self._clean_text_fields)
+                    .pipe(self._extract_preparation)
+                    .pipe(self._extract_nutrition)
+                    .pipe(self._assign_meal_type)
+                    .pipe(self._extract_recipe_ingredients)  # Clean and piped!
+            )
             
-            # Ensure price_range is present
-            if "price_range" not in df.columns:
-                df["price_range"] = None
 
             # Calculate statistics (don't log debug output)
             ingredient_counts = df["ingredients"].apply(len)
@@ -170,6 +168,8 @@ class RecipeLoader(DataLoader):
         df.columns = df.columns.str.lower().str.strip()
         df["id"] = [f"{source_name}_{i}" for i in df.index]
         df["source"] = source_name
+        if "price_range" not in df.columns:
+            df["price_range"] = None
         return df
 
     def _clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame: 
@@ -237,45 +237,44 @@ class RecipeLoader(DataLoader):
     
     
     
-    def _extract_recipe_ingredients(self, row: pd.Series) -> List[str]:
+    def _extract_recipe_ingredients(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Extract ingredients from a recipe row, handling various data formats.
-        
+        Pipeable function that extracts ingredients from each recipe row 
+        and adds an 'ingredients' column to the DataFrame.
+
         Args:
-            row: A pandas Series representing a recipe
-            
+            df: DataFrame with recipe data.
+
         Returns:
-            List of ingredient names as strings
+            DataFrame with a new 'ingredients' column.
         """
-        ingredients = []
-        
-        # Try to extract from RecipeIngredientParts first (most common in the dataset)
-        # recipeingredientparts is always np.ndarray and always in dataset
-        if not ingredients and "recipeingredientparts" in row.index:
-            try:
-                if isinstance(row["recipeingredientparts"], np.ndarray):
-                    for item in row["recipeingredientparts"]:
-                        if isinstance(item, str) and item.strip():
-                            ingredients.append(self.clean_text(item))
-            except Exception as e:
-                self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
-        
-        # If no ingredients found, try "ingredients" field
-        if not ingredients and "ingredients" in row.index:
-            try:
-                if isinstance(row["ingredients"], list):
+        def extract(row: pd.Series) -> List[str]:
+            ingredients = []
+
+            # Try RecipeIngredientParts
+            if "recipeingredientparts" in row and isinstance(row["recipeingredientparts"], np.ndarray):
+                try:
+                    ingredients += [
+                        self.clean_text(item)
+                        for item in row["recipeingredientparts"]
+                        if isinstance(item, str) and item.strip()
+                    ]
+                except Exception as e:
+                    self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
+
+            # Fallback to 'ingredients' field
+            if not ingredients and "ingredients" in row and isinstance(row["ingredients"], list):
+                try:
                     for item in row["ingredients"]:
                         if isinstance(item, str) and item.strip():
                             ingredients.append(self.clean_text(item))
                         elif isinstance(item, (int, float)):
                             ingredients.append(self.clean_text(str(item)))
+                except Exception as e:
+                    self.logger.debug(f"Error processing ingredients field: {e}")
 
-            except Exception as e:
-                self.logger.debug(f"Error processing ingredients field: {e}")
-        
-        # If still no ingredients, return a placeholder, should never exist
-        if not ingredients:
-            ingredients = ["Unknown ingredient"]
-            
-        return ingredients
+            return ingredients or ["Unknown ingredient"]
+
+        df["ingredients"] = df.apply(extract, axis=1)
+        return df
     
