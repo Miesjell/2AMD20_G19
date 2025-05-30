@@ -199,33 +199,11 @@ class RecipeLoader(DataLoader):
         return df
 
     def _extract_nutrition(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Normalize column name mapping
-        col_map = {c.strip().lower(): c for c in df.columns}
-
-        for col in ["calories", "fat", "protein", "sodium"]:
-            ["calories", "fatcontent", "proteincontent", "sodiumcontent"]
-        #     df[col].apply(
-        #     lambda x: self.clean_text(x) if pd.notna(x) else ""
-        # ) 
-            src = col_map.get(col)
-            if src:
-                df[col] = pd.to_numeric(df[src], errors="coerce")
-            else:
-                df[col] = None  # fill with null if missing
-                
-                
-                
-        # attributes = ["calories", "fat", "protein", "sodium"]
-
-        # for attr in attributes:
-        #     # Try to find a column whose name contains the attribute substring
-        #     matching_col = next((col for col in df.columns if col.startswith(attr)), None)
-
-            
-        #     if matching_col:
-        #         df[attr] = df[matching_col].apply(lambda x: self.clean_text(x) if pd.notna(x) else "")
-        #     else:
-        #         df[attr] = ""  # or np.nan
+        attributes = ["calories", "fat", "protein", "sodium"]
+        for attr in attributes:
+            # Find first matching column (can sum different types of fats later)
+            matching_col = next((col for col in df.columns if col.startswith(attr)), None)
+            df[attr] = pd.to_numeric(df[matching_col], errors="coerce")
         return df
 
     def _setup_constraints(self) -> List[str]:
