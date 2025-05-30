@@ -213,93 +213,6 @@ class RecipeLoader(DataLoader):
             "CREATE INDEX IF NOT EXISTS FOR (r:Recipe) ON (r.name)",
             "CREATE INDEX IF NOT EXISTS FOR (i:Ingredient) ON (i.name)",
         ]
-
-    def _extract_recipe_ingredients(self, row: pd.Series) -> List[str]:
-        """
-        Extract ingredients from a recipe row, handling various data formats.
-        
-        Args:
-            row: A pandas Series representing a recipe
-            
-        Returns:
-            List of ingredient names as strings
-        """
-        ingredients = []
-        
-        # Try to extract from RecipeIngredientParts first (most common in the dataset)
-        if "recipeingredientparts" in row.index:
-            try:
-                if isinstance(row["recipeingredientparts"], (list, np.ndarray)):
-                    for item in row["recipeingredientparts"]:
-                        if isinstance(item, str) and item.strip():
-                            ingredients.append(self.clean_text(item))
-                elif pd.notna(row["recipeingredientparts"]) and isinstance(row["recipeingredientparts"], str):
-                    if row["recipeingredientparts"].strip().startswith('[') and row["recipeingredientparts"].strip().endswith(']'):
-                        try:
-                            parts = json.loads(row["recipeingredientparts"])
-                            if isinstance(parts, list):
-                                for part in parts:
-                                    if part and isinstance(part, str):
-                                        ingredients.append(self.clean_text(part))
-                        except:
-                            # If JSON parsing fails, treat as regular string
-                            ingredients.append(self.clean_text(row["recipeingredientparts"]))
-                    else:
-                        ingredients.append(self.clean_text(row["recipeingredientparts"]))
-            except Exception as e:
-                self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
-        
-        # If no ingredients found, try "ingredients" field
-        if not ingredients and "ingredients" in row.index:
-            try:
-                if isinstance(row["ingredients"], (list, np.ndarray)):
-                    for item in row["ingredients"]:
-                        if isinstance(item, str) and item.strip():
-                            ingredients.append(self.clean_text(item))
-                        elif isinstance(item, (int, float)):
-                            ingredients.append(self.clean_text(str(item)))
-                elif pd.notna(row["ingredients"]) and isinstance(row["ingredients"], str):
-                    # Handle string - might be a JSON string
-                    if row["ingredients"].strip().startswith('[') and row["ingredients"].strip().endswith(']'):
-                        try:
-                            # Try to parse as JSON
-                            items = json.loads(row["ingredients"])
-                            if isinstance(items, list):
-                                for item in items:
-                                    if isinstance(item, str) and item.strip():
-                                        ingredients.append(self.clean_text(item))
-                                    elif isinstance(item, dict) and 'name' in item:
-                                        ingredients.append(self.clean_text(str(item['name'])))
-                        except:
-                            # If JSON parsing fails, treat as a regular string
-                            ingredients.append(self.clean_text(row["ingredients"]))
-                    else:
-                        # Regular string
-                        ingredients.append(self.clean_text(row["ingredients"]))
-            except Exception as e:
-                self.logger.debug(f"Error processing ingredients field: {e}")
-        
-        # If we still didn't find ingredients, look for ingredient-like columns
-        if not ingredients:
-            # Look for column names containing 'ingredient'
-            ingredient_cols = [col for col in row.index if isinstance(col, str) and 'ingredient' in col.lower()]
-            
-            for col in ingredient_cols:
-                try:
-                    if isinstance(row[col], (list, np.ndarray)):
-                        for item in row[col]:
-                            if isinstance(item, str) and item.strip():
-                                ingredients.append(self.clean_text(item))
-                    elif pd.notna(row[col]) and isinstance(row[col], str) and row[col].strip():
-                        ingredients.append(self.clean_text(row[col]))
-                except Exception as e:
-                    self.logger.debug(f"Error processing column {col}: {e}")
-        
-        # If still no ingredients, return a placeholder
-        if not ingredients:
-            ingredients = ["Unknown ingredient"]
-            
-        return ingredients
     
     
     def _assign_meal_type(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -321,4 +234,48 @@ class RecipeLoader(DataLoader):
 
         df["meal_type"] = df["name"].apply(lambda x: categorize(str(x)))
         return df
+    
+    
+    
+    def _extract_recipe_ingredients(self, row: pd.Series) -> List[str]:
+        """
+        Extract ingredients from a recipe row, handling various data formats.
+        
+        Args:
+            row: A pandas Series representing a recipe
+            
+        Returns:
+            List of ingredient names as strings
+        """
+        ingredients = []
+        
+        # Try to extract from RecipeIngredientParts first (most common in the dataset)
+        # recipeingredientparts is always np.ndarray and always in dataset
+        if not ingredients and "recipeingredientparts" in row.index:
+            try:
+                if isinstance(row["recipeingredientparts"], np.ndarray):
+                    for item in row["recipeingredientparts"]:
+                        if isinstance(item, str) and item.strip():
+                            ingredients.append(self.clean_text(item))
+            except Exception as e:
+                self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
+        
+        # If no ingredients found, try "ingredients" field
+        if not ingredients and "ingredients" in row.index:
+            try:
+                if isinstance(row["ingredients"], list):
+                    for item in row["ingredients"]:
+                        if isinstance(item, str) and item.strip():
+                            ingredients.append(self.clean_text(item))
+                        elif isinstance(item, (int, float)):
+                            ingredients.append(self.clean_text(str(item)))
+
+            except Exception as e:
+                self.logger.debug(f"Error processing ingredients field: {e}")
+        
+        # If still no ingredients, return a placeholder, should never exist
+        if not ingredients:
+            ingredients = ["Unknown ingredient"]
+            
+        return ingredients
     
