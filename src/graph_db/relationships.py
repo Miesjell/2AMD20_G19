@@ -111,7 +111,7 @@ class RelationshipBuilder:
             "query": """
                 MATCH (a:Allergy)-[:PROHIBITS]->(f:FoodItem)
                 MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
-                WHERE i.name = f.name
+                WHERE i.name = f.name OR TOLOWER(i.name) CONTAINS TOLOWER(f.name)
                 MERGE (r)-[:MAY_CONTAIN_ALLERGEN]->(a)
             """
         }
