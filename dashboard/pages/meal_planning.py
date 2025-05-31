@@ -6,7 +6,6 @@ from dashboard.dashboard_helpers import generate_meal_plan
 def render_meal_planning_tab():
     """Render the meal planning tab with weekly meal plans."""
     st.header("📅 Smart Meal Planning")
-    connection = st.session_state.connection
     # Meal planning configuration
     col1, col2, col3 = st.columns(3)
 
@@ -40,7 +39,7 @@ def render_meal_planning_tab():
     # Generate meal plan button
     if st.button("🤖 Generate Smart Meal Plan", use_container_width=True, type="primary"):
         with st.spinner("Creating your personalized meal plan..."):
-            meal_plan_df = generate_meal_plan(planning_days, meals_per_day, connection)
+            meal_plan_df = generate_meal_plan(planning_days, meals_per_day)
 
             if meal_plan_df.empty:
                 st.error("Unable to generate meal plan. Please check your database connection.")
