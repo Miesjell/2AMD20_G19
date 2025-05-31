@@ -104,4 +104,4 @@ def render_recommendations_tab():
                 st.session_state.current_recommendations = recipes_df
 
                 for i, (_, row) in enumerate(recipes_df.iterrows()):
-                    render_recipe_card(row, i, "recommendation", connection=st.session_state.connection)
+                    render_recipe_card(row, i, "recommendation")

@@ -9,7 +9,6 @@ from dashboard.dashboard_helpers import get_recipe_analytics
 def render_ingredient_insights_tab():
     """Render the ingredient insights and exploration tab."""
     st.header("🧪 Ingredient Intelligence")
-    connection = st.session_state.connection
     # Ingredient search
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -55,11 +54,11 @@ def render_ingredient_insights_tab():
                         """, unsafe_allow_html=True)
 
                 # Recipes with this ingredient
-                ingredient_recipes = find_recipes_with_ingredient(ingredient_name, connection)
+                ingredient_recipes = find_recipes_with_ingredient(ingredient_name)
                 if not ingredient_recipes.empty:
                     st.markdown(f"### 🍽️ Recipes containing {ingredient_name}")
                     for i, (_, row) in enumerate(ingredient_recipes.head(5).iterrows()):
-                        render_recipe_card(row, i, source="ingredient", connection=connection)
+                        render_recipe_card(row, i, source="ingredient")
                 else:
                     st.info("No recipes found with this ingredient.")
             else:

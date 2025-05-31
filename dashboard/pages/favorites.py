@@ -39,4 +39,4 @@ def render_favorites_tab():
 
         # Render each saved recipe card
         for i, (_, row) in enumerate(saved_recipes_df.iterrows()):
-            render_recipe_card(row, i, source="favorite", connection=st.session_state.connection, show_rating=True)
+            render_recipe_card(row, i, source="favorite", show_rating=True)

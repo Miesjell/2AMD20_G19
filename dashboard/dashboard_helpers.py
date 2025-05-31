@@ -406,17 +406,17 @@ def create_ingredient_popularity_chart() -> go.Figure:
     
     return fig
 
-def create_nutrition_radar_chart(recipes: List[str], connection) -> go.Figure:
+def create_nutrition_radar_chart(recipes: List[str]) -> go.Figure:
     """Create a radar chart comparing nutritional profiles of recipes."""
     if not recipes or not st.session_state.connected:
         return go.Figure()
-
+    
     try:
         fig = go.Figure()
         nutrition_categories = ['calories', 'protein', 'fat', 'carbs', 'fiber']
 
         for recipe in recipes[:3]:  # Limit to 3 recipes for clarity
-            nutrition = get_recipe_nutrition_profile(recipe, connection)
+            nutrition = get_recipe_nutrition_profile(recipe)
 
             if nutrition:
                 values = []
@@ -703,7 +703,7 @@ def _build_fallback_favorites() -> pd.DataFrame:
 
 
 
-def get_recipe_complexity_score(recipe_name: str, connection) -> Dict[str, Any]:
+def get_recipe_complexity_score(recipe_name: str) -> Dict[str, Any]:
     """
     Calculate a complexity score for a recipe based on number of ingredients.
 
@@ -714,6 +714,7 @@ def get_recipe_complexity_score(recipe_name: str, connection) -> Dict[str, Any]:
     Returns:
         Dict with ingredient count, complexity level, and numeric score
     """
+    connection = st.session_state.connection
     if not st.session_state.connected:
         return {}
 
@@ -748,8 +749,9 @@ def get_recipe_complexity_score(recipe_name: str, connection) -> Dict[str, Any]:
         return {}
     
     
-def get_recipe_nutrition_profile(recipe_name: str, connection) -> Dict[str, Any]:
+def get_recipe_nutrition_profile(recipe_name: str) -> Dict[str, Any]:
     """Get detailed nutritional profile for a recipe."""
+    connection = st.session_state.connection
     if not st.session_state.connected:
         return {}
 
@@ -770,7 +772,7 @@ def get_recipe_nutrition_profile(recipe_name: str, connection) -> Dict[str, Any]
         st.error(f"Error getting nutrition profile: {e}")
         return {}
 
-def compare_recipes(recipe_names: List[str], connection) -> pd.DataFrame:
+def compare_recipes(recipe_names: List[str]) -> pd.DataFrame:
     """Compare nutritional profiles of multiple recipes."""
     if not st.session_state.connected or len(recipe_names) < 2:
         return pd.DataFrame()
@@ -779,7 +781,7 @@ def compare_recipes(recipe_names: List[str], connection) -> pd.DataFrame:
         comparison_data = []
 
         for recipe_name in recipe_names:
-            nutrition = get_recipe_nutrition_profile(recipe_name, connection)
+            nutrition = get_recipe_nutrition_profile(recipe_name)
             if nutrition:
                 nutrition['Recipe'] = recipe_name
                 comparison_data.append(nutrition)
@@ -790,7 +792,7 @@ def compare_recipes(recipe_names: List[str], connection) -> pd.DataFrame:
         return pd.DataFrame()
     
     
-def generate_meal_plan(days: int, meals_per_day: int, connection) -> pd.DataFrame:
+def generate_meal_plan(days: int, meals_per_day: int) -> pd.DataFrame:
     """Generate a balanced meal plan.
 
     Args:
@@ -801,6 +803,8 @@ def generate_meal_plan(days: int, meals_per_day: int, connection) -> pd.DataFram
     Returns:
         DataFrame containing the meal plan
     """
+    connection = st.session_state.connection
+    
     if not st.session_state.connected:
         return pd.DataFrame()
 
@@ -833,8 +837,10 @@ def generate_meal_plan(days: int, meals_per_day: int, connection) -> pd.DataFram
         return pd.DataFrame()
     
     
-def get_recipe_recommendations_by_similarity(base_recipe: str, connection, limit: int = 5) -> pd.DataFrame:
+def get_recipe_recommendations_by_similarity(base_recipe: str, limit: int = 5) -> pd.DataFrame:
     """Find recipes similar to a given recipe based on shared ingredients."""
+    connection = st.session_state.connection
+    
     if not st.session_state.connected:
         return pd.DataFrame()
 
@@ -854,8 +860,10 @@ def get_recipe_recommendations_by_similarity(base_recipe: str, connection, limit
         st.error(f"Error finding similar recipes: {e}")
         return pd.DataFrame()
 
-def find_recipes_with_ingredient(ingredient_name: str, connection, limit: int = 10) -> pd.DataFrame:
+def find_recipes_with_ingredient(ingredient_name: str, limit: int = 10) -> pd.DataFrame:
     """Find recipes containing a specific ingredient."""
+    connection = st.session_state.connection
+    
     if not st.session_state.connected:
         return pd.DataFrame()
 
@@ -875,15 +883,15 @@ def find_recipes_with_ingredient(ingredient_name: str, connection, limit: int = 
 
 ##### rendering
 
-def render_recipe_card(recipe_row: Dict[str, Any], index: int, source: str, connection, show_rating: bool = False):
+def render_recipe_card(recipe_row: Dict[str, Any], index: int, source: str, show_rating: bool = False):
     """Render an enhanced recipe card with modern styling and detailed information."""
     recipe_name = recipe_row['Recipe']
     calories = recipe_row.get('Calories', 'N/A')
-
-    ingredients = find_recipe_ingredients(recipe_name, connection)
+    
+    ingredients = find_recipe_ingredients(recipe_name)
     ingredient_count = len(ingredients)
-    complexity = get_recipe_complexity_score(recipe_name, connection)
-    nutrition = get_recipe_nutrition_profile(recipe_name, connection)
+    complexity = get_recipe_complexity_score(recipe_name)
+    nutrition = get_recipe_nutrition_profile(recipe_name)
 
     with st.expander(
         f"🍽️ {recipe_name} • {calories} cal • {ingredient_count} ingredients • {complexity.get('complexity', 'Unknown')} complexity",
@@ -976,7 +984,7 @@ def render_recipe_card(recipe_row: Dict[str, Any], index: int, source: str, conn
             if st.button(f"🔍 Similar", key=f"similar_{source}_{index}", use_container_width=True):
                 st.session_state.similarity_search_recipe = recipe_name
                 st.info(f"🔍 Finding recipes similar to {recipe_name}...")
-                similar_recipes = get_recipe_recommendations_by_similarity(recipe_name, connection, 3)
+                similar_recipes = get_recipe_recommendations_by_similarity(recipe_name, 3)
                 if not similar_recipes.empty:
                     st.markdown("**Similar recipes:**")
                     for _, similar in similar_recipes.iterrows():

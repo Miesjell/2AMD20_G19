@@ -27,7 +27,7 @@ def render_search_tab():
                 st.success(f"Found {len(search_results)} recipes matching '{search_term}'")
 
                 for i, (_, row) in enumerate(search_results.iterrows()):
-                    render_recipe_card(row, i, source="search", connection=st.session_state.connection)
+                    render_recipe_card(row, i, source="search")
 
     # Quick search suggestions
     if st.session_state.search_history:
