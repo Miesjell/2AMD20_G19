@@ -62,27 +62,21 @@ class SmartRecipeRecommendationDashboard:
     def __init__(self):
         """Initialize the dashboard with database connection and enhanced session state."""
         # Initialize session state variables if they don't exist
-        if 'connected' not in st.session_state:
-            st.session_state.connected = False
-        if 'connection' not in st.session_state:
-            st.session_state.connection = None
-        if 'query_manager' not in st.session_state:
-            st.session_state.query_manager = None
-        if 'diet_preferences' not in st.session_state:
-            st.session_state.diet_preferences = []
-        if 'allergies' not in st.session_state:
-            st.session_state.allergies = []
-        if 'meal_types' not in st.session_state:
-            st.session_state.meal_types = []
-        if 'favorite_recipes' not in st.session_state:
-            st.session_state.favorite_recipes = []
-        if 'user_id' not in st.session_state:
-            # Generate a simple user ID for the session
-            st.session_state.user_id = f"user_{np.random.randint(10000)}"
-        if 'search_history' not in st.session_state:
-            st.session_state.search_history = []
-        if 'recipe_analytics' not in st.session_state:
-            st.session_state.recipe_analytics = {}
+        defaults = {
+            'connected': False,
+            'connection': None,
+            'query_manager': None,
+            'diet_preferences': [],
+            'allergies': [],
+            'meal_types': [],
+            'favorite_recipes': [],
+            'user_id': f"user_{np.random.randint(10000)}",
+            'search_history': [],
+            'recipe_analytics': {},
+        }
+
+        for key, value in defaults.items():
+            st.session_state.setdefault(key, value)
         
     @property
     def connected(self):
