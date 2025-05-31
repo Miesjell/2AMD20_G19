@@ -8,20 +8,13 @@ Connected to a Neo4j graph database containing recipes, ingredients, allergies, 
 """
 
 import streamlit as st
-import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
 import time
-from dashboard.dashboard_helpers import apply_custom_css
-from dashboard.dashboard_helpers import get_recipe_analytics
+from typing import List, Dict, Any
 
-
+from dashboard.dashboard_helpers import apply_custom_css, get_recipe_analytics
 from dashboard.visualization import display_metrics_dashboard
 from dashboard.database_init import connect_to_database
-
 
 from dashboard.pages.meal_planning import render_meal_planning_tab
 from dashboard.pages.analytics import render_analytics_tab
@@ -30,12 +23,6 @@ from dashboard.pages.comparison import render_recipe_comparison_tab
 from dashboard.pages.favorites import render_favorites_tab
 from dashboard.pages.recipe_search import render_search_tab
 from dashboard.pages.recommendations import render_recommendations_tab
-
-
-
-# Import Neo4j connection modules from the existing project
-from src.graph_db.neo4j.connection import Neo4jConnection
-from src.graph_db.queries.manager import QueryManager
 
 # Set page config
 st.set_page_config(
