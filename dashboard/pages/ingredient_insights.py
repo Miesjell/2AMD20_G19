@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
+from typing import Dict, Any
 
-from dashboard.dashboard_helpers import render_recipe_card
-from dashboard.dashboard_helpers import get_ingredient_insights
-from dashboard.dashboard_helpers import find_recipes_with_ingredient
-from dashboard.dashboard_helpers import get_recipe_analytics
+from dashboard.dashboard_helpers import render_recipe_card, get_recipe_analytics
+from dashboard.queries import find_recipes_with_ingredient
 
 def render_ingredient_insights_tab():
     """Render the ingredient insights and exploration tab."""
@@ -78,3 +77,36 @@ def render_ingredient_insights_tab():
                             help=f"Used in {row['RecipeCount']} recipes"):
                     st.session_state.selected_ingredient = row['Ingredient']
                     st.rerun()
+                    
+def get_ingredient_insights(ingredient_name: str) -> Dict[str, Any]:
+    """Get detailed insights about a specific ingredient."""
+    if not st.session_state.connected:
+        return {}
+    
+    try:
+        # Recipes containing this ingredient
+        recipes_query = """
+        MATCH (i:Ingredient {name: $ingredient_name})<-[:CONTAINS]-(r:Recipe)
+        RETURN count(r) AS recipe_count
+        """
+        
+        # Allergies related to this ingredient
+        allergies_query = """
+        MATCH (i:Ingredient {name: $ingredient_name})-[:CAUSES]->(a:Allergy)
+        RETURN collect(a.name) AS related_allergies
+        """
+        
+        recipe_count = st.session_state.connection.execute_query_to_df(
+            recipes_query, {"ingredient_name": ingredient_name}
+        )
+        allergies = st.session_state.connection.execute_query_to_df(
+            allergies_query, {"ingredient_name": ingredient_name}
+        )
+        
+        return {
+            'recipe_count': recipe_count.iloc[0]['recipe_count'] if not recipe_count.empty else 0,
+            'related_allergies': allergies.iloc[0]['related_allergies'] if not allergies.empty else []
+        }
+    except Exception as e:
+        st.error(f"Error getting ingredient insights: {e}")
+        return {}

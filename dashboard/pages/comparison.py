@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
+from typing import List
 
 from dashboard.dashboard_helpers import (
-    search_recipes_by_name,
-    compare_recipes,
     get_recipe_complexity_score,
-    create_nutrition_radar_chart,
     get_recipe_recommendations_by_similarity,
 )
 
+from dashboard.queries import get_recipe_nutrition_profile, search_recipes_by_name
+from dashboard.visualization import create_nutrition_radar_chart
 
 def render_recipe_comparison_tab():
     """Render the recipe comparison tab."""
@@ -126,3 +126,23 @@ def render_recipe_comparison_tab():
                                 st.rerun()
         else:
             st.warning(f"No similar recipes found for '{base_recipe}'. Try a different recipe name.")
+
+def compare_recipes(recipe_names: List[str]) -> pd.DataFrame:
+    """Compare nutritional profiles of multiple recipes."""
+    if not st.session_state.connected or len(recipe_names) < 2:
+        return pd.DataFrame()
+
+    try:
+        comparison_data = []
+
+        for recipe_name in recipe_names:
+            nutrition = get_recipe_nutrition_profile(recipe_name)
+            if nutrition:
+                nutrition['Recipe'] = recipe_name
+                comparison_data.append(nutrition)
+
+        return pd.DataFrame(comparison_data)
+    except Exception as e:
+        st.error(f"Error comparing recipes: {e}")
+        return pd.DataFrame()
+

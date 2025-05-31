@@ -1,16 +1,15 @@
 import streamlit as st
-from typing import Dict, Any, List, Optional
 import pandas as pd
+import time
+from typing import Dict, Any
+
 import plotly.graph_objects as go
 import plotly.express as px
-import time
 
-# Most of these are not used?
 from dashboard.queries import (
-    find_recipes_for_diet,
-    find_recipes_without_allergens,
     find_recipe_ingredients,
-    find_recipes_by_meal_type
+    get_recipe_nutrition_profile,
+    get_recipe_recommendations_by_similarity,
 )
 
 #### STYILING
@@ -229,229 +228,91 @@ def apply_custom_css():
     }
     </style>
     """, unsafe_allow_html=True)
-    
+      
+              
+#### Utils #####
+def get_recipe_complexity_score(recipe_name: str) -> Dict[str, Any]:
+    """
+    Calculate a complexity score for a recipe based on number of ingredients.
 
-def display_metrics_dashboard():
-    """Display key metrics in an attractive dashboard format with enhanced styling."""
-    analytics = get_recipe_analytics()
-    
-    # Main metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_recipes = analytics.get('total_recipes', 0)
-        st.markdown(f"""
-        <div class="dashboard-card floating-card animated-metric">
-            <h3 class="gradient-text">Total Recipes</h3>
-            <h1 style="color: #333; margin: 0; font-size: 2.5rem;">{total_recipes:,}</h1>
-            <p style="color: #666; margin: 0;">Available in database</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        total_ingredients = analytics.get('total_ingredients', 0)
-        st.markdown(f"""
-        <div class="dashboard-card floating-card animated-metric">
-            <h3 class="gradient-text">Unique Ingredients</h3>
-            <h1 style="color: #333; margin: 0; font-size: 2.5rem;">{total_ingredients:,}</h1>
-            <p style="color: #666; margin: 0;">Ingredient variety</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        avg_calories = analytics.get('calorie_stats', {}).get('avg_calories', 0)
-        calorie_color = "#27ae60" if avg_calories < 400 else "#f39c12" if avg_calories < 600 else "#e74c3c"
-        st.markdown(f"""
-        <div class="dashboard-card floating-card animated-metric">
-            <h3 class="gradient-text">Avg Calories</h3>
-            <h1 style="color: {calorie_color}; margin: 0; font-size: 2.5rem;">{avg_calories:.0f}</h1>
-            <p style="color: #666; margin: 0;">Per recipe</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        fav_count = len(st.session_state.favorite_recipes)
-        st.markdown(f"""
-        <div class="dashboard-card floating-card animated-metric">
-            <h3 class="gradient-text">Your Favorites</h3>
-            <h1 style="color: #e74c3c; margin: 0; font-size: 2.5rem;">{fav_count}</h1>
-            <p style="color: #666; margin: 0;">Saved recipes</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Additional insights row
-    if analytics.get('calorie_stats'):
-        insight_col1, insight_col2 = st.columns(2)
-        
-        with insight_col1:
-            min_cal = analytics['calorie_stats'].get('min_calories', 0)
-            max_cal = analytics['calorie_stats'].get('max_calories', 0)
-            st.markdown(f"""
-            <div class="dashboard-card">
-                <h4 style="color: #667eea;">📊 Calorie Range</h4>
-                <p style="margin: 0.5rem 0;">
-                    <strong>Lowest:</strong> {min_cal:.0f} cal<br>
-                    <strong>Highest:</strong> {max_cal:.0f} cal<br>
-                    <strong>Range:</strong> {max_cal - min_cal:.0f} cal
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with insight_col2:
-            recipes_with_cal = analytics['calorie_stats'].get('recipes_with_calories', 0)
-            coverage = (recipes_with_cal / analytics.get('total_recipes', 1)) * 100 if analytics.get('total_recipes', 0) > 0 else 0
-            st.markdown(f"""
-            <div class="dashboard-card">
-                <h4 style="color: #667eea;">🔍 Data Coverage</h4>
-                <p style="margin: 0.5rem 0;">
-                    <strong>With Calories:</strong> {recipes_with_cal:,} recipes<br>
-                    <strong>Coverage:</strong> {coverage:.1f}%<br>
-                    <strong>Quality:</strong> {'Excellent' if coverage > 80 else 'Good' if coverage > 60 else 'Fair'}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            
-            
-### charts
-def create_calorie_distribution_chart() -> go.Figure:
-    """Create a histogram of calorie distribution."""
+    Args:
+        recipe_name: Name of the recipe
+        connection: Neo4jConnection object with `execute_query_to_df` method
+
+    Returns:
+        Dict with ingredient count, complexity level, and numeric score
+    """
+    connection = st.session_state.connection
     if not st.session_state.connected:
-        return go.Figure()
-    
+        return {}
+
     try:
-        query = """
-        MATCH (r:Recipe)
-        WHERE r.calories IS NOT NULL AND r.calories > 0
-        RETURN r.calories AS calories
+        ingredients_query = """
+        MATCH (r:Recipe {name: $recipe_name})-[:CONTAINS]->(i:Ingredient)
+        RETURN count(i) AS ingredient_count
         """
-        
-        df = st.session_state.connection.execute_query_to_df(query, {})
-        
-        if df.empty:
-            return go.Figure()
-        
-        fig = px.histogram(
-            df, 
-            x='calories', 
-            bins=30,
-            title='Recipe Calorie Distribution',
-            labels={'calories': 'Calories per Recipe', 'count': 'Number of Recipes'},
-            color_discrete_sequence=['#667eea']
+        ingredients_df = connection.execute_query_to_df(
+            ingredients_query, {"recipe_name": recipe_name}
         )
-        
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(color='black'),
-            title_font_color='black'
-        )
-        
-        return fig
+
+        ingredient_count = ingredients_df.iloc[0]['ingredient_count'] if not ingredients_df.empty else 0
+
+        if ingredient_count <= 5:
+            complexity = "Simple"
+            score = 1
+        elif ingredient_count <= 10:
+            complexity = "Moderate"
+            score = 2
+        else:
+            complexity = "Complex"
+            score = 3
+
+        return {
+            'ingredient_count': ingredient_count,
+            'complexity': complexity,
+            'score': score
+        }
     except Exception as e:
-        st.error(f"Error creating chart: {e}")
-        return go.Figure()
+        st.error(f"Error calculating complexity: {e}")
+        return {}
 
-def create_meal_type_chart() -> go.Figure:
-    """Create a pie chart of meal type distribution."""
-    analytics = get_recipe_analytics()
-    meal_distribution = analytics.get('meal_distribution', pd.DataFrame())
-    
-    if meal_distribution.empty:
-        return go.Figure()
-    
-    fig = px.pie(
-        meal_distribution, 
-        values='recipe_count', 
-        names='meal_type',
-        title='Recipe Distribution by Meal Type',
-        color_discrete_sequence=px.colors.qualitative.Set3
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font=dict(color='black'),
-        title_font_color='black'
-    )
-    
-    return fig
+def save_recipe_preference(person_id: str, recipe_name: str, rating: int = 5) -> bool:
+    if not st.session_state.connected:
+        return False
 
-def create_ingredient_popularity_chart() -> go.Figure:
-    """Create a bar chart of most popular ingredients."""
-    analytics = get_recipe_analytics()
-    popular_ingredients = analytics.get('popular_ingredients', pd.DataFrame())
-    
-    if popular_ingredients.empty:
-        return go.Figure()
-    
-    fig = px.bar(
-        popular_ingredients.head(10), 
-        x='RecipeCount', 
-        y='Ingredient',
-        orientation='h',
-        title='Top 10 Most Popular Ingredients',
-        labels={'RecipeCount': 'Number of Recipes', 'Ingredient': 'Ingredient'},
-        color='RecipeCount',
-        color_continuous_scale='Viridis'
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font=dict(color='black'),
-        title_font_color='black',
-        yaxis={'categoryorder': 'total ascending'}
-    )
-    
-    return fig
-
-def create_nutrition_radar_chart(recipes: List[str]) -> go.Figure:
-    """Create a radar chart comparing nutritional profiles of recipes."""
-    if not recipes or not st.session_state.connected:
-        return go.Figure()
-    
     try:
-        fig = go.Figure()
-        nutrition_categories = ['calories', 'protein', 'fat', 'carbs', 'fiber']
+        create_person_query = """
+        MERGE (p:Person {id: $person_id})
+        RETURN p
+        """
 
-        for recipe in recipes[:3]:  # Limit to 3 recipes for clarity
-            nutrition = get_recipe_nutrition_profile(recipe)
+        save_pref_query = """
+        MATCH (p:Person {id: $person_id})
+        MATCH (r:Recipe {name: $recipe_name})
+        CREATE (p)-[l:LIKES {rating: $rating, timestamp: timestamp()}]->(r)
+        RETURN l
+        """
 
-            if nutrition:
-                values = []
-                for category in nutrition_categories:
-                    value = nutrition.get(category, 0)
-                    if category == 'calories':
-                        values.append(min(value / 10, 100))
-                    else:
-                        values.append(min(value or 0, 100))
+        with st.session_state.connection.get_driver().session() as session:
+            session.run(create_person_query, {"person_id": person_id})
+            session.run(save_pref_query, {
+                "person_id": person_id,
+                "recipe_name": recipe_name,
+                "rating": rating
+            })
 
-                fig.add_trace(go.Scatterpolar(
-                    r=values,
-                    theta=nutrition_categories,
-                    fill='toself',
-                    name=recipe[:20] + "..." if len(recipe) > 20 else recipe
-                ))
+        if recipe_name not in st.session_state.favorite_recipes:
+            st.session_state.favorite_recipes.append(recipe_name)
 
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100])
-            ),
-            showlegend=True,
-            title="Nutritional Profile Comparison",
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(color='black'),
-            title_font_color='black'
-        )
+        return True
 
-        return fig
     except Exception as e:
-        st.error(f"Error creating radar chart: {e}")
-        return go.Figure()
-            
-#### QUERIES #####
+        st.error(f"Error saving recipe preference: {e}")
+        if recipe_name not in st.session_state.favorite_recipes:
+            st.session_state.favorite_recipes.append(recipe_name)
+        return True
+
+
 def get_recipe_analytics() -> Dict[str, Any]:
         """Get comprehensive analytics about recipes in the database."""
         if not st.session_state.connected:
@@ -501,388 +362,8 @@ def get_recipe_analytics() -> Dict[str, Any]:
         except Exception as e:
             st.error(f"Error getting analytics: {e}")
             return {}
-
-def search_recipes_by_name(search_term: str, limit: int = 10) -> pd.DataFrame:
-    """Search recipes by name with fuzzy matching."""
-    if not st.session_state.connected or not search_term:
-        return pd.DataFrame()
-    
-    query = f"""
-    MATCH (r:Recipe)
-    WHERE toLower(r.name) CONTAINS toLower($search_term)
-    RETURN r.name AS Recipe, r.calories AS Calories, 
-            r.preparation_description AS Preparation
-    ORDER BY r.name
-    LIMIT {limit}
-    """
-    
-    # Add to search history
-    if search_term not in st.session_state.search_history:
-        st.session_state.search_history.append(search_term)
-        # Keep only last 10 searches
-        st.session_state.search_history = st.session_state.search_history[-10:]
-    
-    return st.session_state.connection.execute_query_to_df(query, {"search_term": search_term})
-
-def get_ingredient_insights(ingredient_name: str) -> Dict[str, Any]:
-    """Get detailed insights about a specific ingredient."""
-    if not st.session_state.connected:
-        return {}
-    
-    try:
-        # Recipes containing this ingredient
-        recipes_query = """
-        MATCH (i:Ingredient {name: $ingredient_name})<-[:CONTAINS]-(r:Recipe)
-        RETURN count(r) AS recipe_count
-        """
         
-        # Allergies related to this ingredient
-        allergies_query = """
-        MATCH (i:Ingredient {name: $ingredient_name})-[:CAUSES]->(a:Allergy)
-        RETURN collect(a.name) AS related_allergies
-        """
-        
-        recipe_count = st.session_state.connection.execute_query_to_df(
-            recipes_query, {"ingredient_name": ingredient_name}
-        )
-        allergies = st.session_state.connection.execute_query_to_df(
-            allergies_query, {"ingredient_name": ingredient_name}
-        )
-        
-        return {
-            'recipe_count': recipe_count.iloc[0]['recipe_count'] if not recipe_count.empty else 0,
-            'related_allergies': allergies.iloc[0]['related_allergies'] if not allergies.empty else []
-        }
-    except Exception as e:
-        st.error(f"Error getting ingredient insights: {e}")
-        return {}
-
-def find_personalized_recipes(
-    diet_preferences: List[str],
-    allergies: List[str],
-    meal_type: Optional[str] = None,
-    min_calories: Optional[int] = None,
-    max_calories: Optional[int] = None,
-    limit: int = 10
-) -> pd.DataFrame:
-    if not st.session_state.connected:
-        return pd.DataFrame()
-
-    params = {}
-    diet_condition, meal_type_condition, allergy_condition, calorie_condition = "", "", "", ""
-
-    if diet_preferences:
-        diet_params = {f"diet{i}": dp for i, dp in enumerate(diet_preferences)}
-        params.update(diet_params)
-        include = [f"EXISTS {{ MATCH (r)<-[:INCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
-        exclude = [f"NOT EXISTS {{ MATCH (r)<-[:EXCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
-        diet_condition = f"\nAND {' AND '.join(include)}\nAND {' AND '.join(exclude)}"
-
-    if meal_type and meal_type != "All Types":
-        params["meal_type"] = meal_type
-        meal_type_condition = "\nAND EXISTS {\nMATCH (r)-[:IS_TYPE]->(:MealType {name: $meal_type})\n}"
-
-    if allergies:
-        allergy_params = {f"allergen{i}": a for i, a in enumerate(allergies)}
-        params.update(allergy_params)
-        direct = [f"NOT EXISTS {{ MATCH (r)-[:MAY_CONTAIN_ALLERGEN]->(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
-        via_ingredient = [f"NOT EXISTS {{ MATCH (r)-[:CONTAINS]->(:Ingredient)<-[:CAUSES]-(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
-        allergy_condition = "\nAND " + " AND ".join([f"({d} AND {v})" for d, v in zip(direct, via_ingredient)])
-
-    if min_calories is not None:
-        params["min_calories"] = min_calories
-        calorie_condition += " AND r.calories >= $min_calories"
-    if max_calories is not None:
-        params["max_calories"] = max_calories
-        calorie_condition += " AND r.calories <= $max_calories"
-
-    query = f"""
-    MATCH (r:Recipe)
-    WHERE true
-    {diet_condition}
-    {meal_type_condition}
-    {allergy_condition}
-    {calorie_condition}
-    RETURN r.name AS Recipe, r.calories AS Calories,
-           r.preparation_description AS Preparation
-    ORDER BY r.calories ASC
-    LIMIT {limit}
-    """
-
-    return st.session_state.connection.execute_query_to_df(query, params)
-
-def save_recipe_preference(person_id: str, recipe_name: str, rating: int = 5) -> bool:
-    if not st.session_state.connected:
-        return False
-
-    try:
-        create_person_query = """
-        MERGE (p:Person {id: $person_id})
-        RETURN p
-        """
-
-        save_pref_query = """
-        MATCH (p:Person {id: $person_id})
-        MATCH (r:Recipe {name: $recipe_name})
-        CREATE (p)-[l:LIKES {rating: $rating, timestamp: timestamp()}]->(r)
-        RETURN l
-        """
-
-        with st.session_state.connection.get_driver().session() as session:
-            session.run(create_person_query, {"person_id": person_id})
-            session.run(save_pref_query, {
-                "person_id": person_id,
-                "recipe_name": recipe_name,
-                "rating": rating
-            })
-
-        if recipe_name not in st.session_state.favorite_recipes:
-            st.session_state.favorite_recipes.append(recipe_name)
-
-        return True
-
-    except Exception as e:
-        st.error(f"Error saving recipe preference: {e}")
-        if recipe_name not in st.session_state.favorite_recipes:
-            st.session_state.favorite_recipes.append(recipe_name)
-        return True
-
-
-def get_saved_recipes(person_id: str) -> pd.DataFrame:
-    if not st.session_state.connected:
-        return pd.DataFrame()
-
-    try:
-        query = """
-        MATCH (p:Person {id: $person_id})-[l:LIKES]->(r:Recipe)
-        RETURN r.name AS Recipe, r.calories AS Calories,
-               l.rating AS Rating, l.timestamp AS SavedOn
-        ORDER BY l.timestamp DESC
-        """
-
-        df = st.session_state.connection.execute_query_to_df(query, {"person_id": person_id})
-        if not df.empty:
-            return df
-
-        # fallback to session state
-        return _build_fallback_favorites()
-
-    except Exception as e:
-        st.error(f"Error retrieving saved recipes: {e}")
-        return _build_fallback_favorites()
-
-
-def _build_fallback_favorites() -> pd.DataFrame:
-    if 'favorite_recipes' not in st.session_state or not st.session_state.favorite_recipes:
-        return pd.DataFrame()
-
-    recipe_data = []
-    for recipe in st.session_state.favorite_recipes:
-        details_query = """
-        MATCH (r:Recipe {name: $recipe_name})
-        RETURN r.name AS Recipe, r.calories AS Calories
-        """
-        try:
-            df = st.session_state.connection.execute_query_to_df(details_query, {"recipe_name": recipe})
-            if not df.empty:
-                data = df.iloc[0].to_dict()
-                data["Rating"] = 5
-                data["SavedOn"] = pd.Timestamp.now()
-                recipe_data.append(data)
-            else:
-                recipe_data.append({
-                    "Recipe": recipe,
-                    "Calories": None,
-                    "Rating": 5,
-                    "SavedOn": pd.Timestamp.now()
-                })
-        except Exception:
-            continue
-
-    return pd.DataFrame(recipe_data)
-
-
-
-def get_recipe_complexity_score(recipe_name: str) -> Dict[str, Any]:
-    """
-    Calculate a complexity score for a recipe based on number of ingredients.
-
-    Args:
-        recipe_name: Name of the recipe
-        connection: Neo4jConnection object with `execute_query_to_df` method
-
-    Returns:
-        Dict with ingredient count, complexity level, and numeric score
-    """
-    connection = st.session_state.connection
-    if not st.session_state.connected:
-        return {}
-
-    try:
-        ingredients_query = """
-        MATCH (r:Recipe {name: $recipe_name})-[:CONTAINS]->(i:Ingredient)
-        RETURN count(i) AS ingredient_count
-        """
-        ingredients_df = connection.execute_query_to_df(
-            ingredients_query, {"recipe_name": recipe_name}
-        )
-
-        ingredient_count = ingredients_df.iloc[0]['ingredient_count'] if not ingredients_df.empty else 0
-
-        if ingredient_count <= 5:
-            complexity = "Simple"
-            score = 1
-        elif ingredient_count <= 10:
-            complexity = "Moderate"
-            score = 2
-        else:
-            complexity = "Complex"
-            score = 3
-
-        return {
-            'ingredient_count': ingredient_count,
-            'complexity': complexity,
-            'score': score
-        }
-    except Exception as e:
-        st.error(f"Error calculating complexity: {e}")
-        return {}
-    
-    
-def get_recipe_nutrition_profile(recipe_name: str) -> Dict[str, Any]:
-    """Get detailed nutritional profile for a recipe."""
-    connection = st.session_state.connection
-    if not st.session_state.connected:
-        return {}
-
-    try:
-        query = """
-        MATCH (r:Recipe {name: $recipe_name})
-        RETURN r.calories AS calories, 
-               r.protein AS protein,
-               r.fat AS fat, 
-               r.carbohydrates AS carbs,
-               r.fiber AS fiber,
-               r.sugar AS sugar,
-               r.sodium AS sodium
-        """
-        df = connection.execute_query_to_df(query, {"recipe_name": recipe_name})
-        return df.iloc[0].to_dict() if not df.empty else {}
-    except Exception as e:
-        st.error(f"Error getting nutrition profile: {e}")
-        return {}
-
-def compare_recipes(recipe_names: List[str]) -> pd.DataFrame:
-    """Compare nutritional profiles of multiple recipes."""
-    if not st.session_state.connected or len(recipe_names) < 2:
-        return pd.DataFrame()
-
-    try:
-        comparison_data = []
-
-        for recipe_name in recipe_names:
-            nutrition = get_recipe_nutrition_profile(recipe_name)
-            if nutrition:
-                nutrition['Recipe'] = recipe_name
-                comparison_data.append(nutrition)
-
-        return pd.DataFrame(comparison_data)
-    except Exception as e:
-        st.error(f"Error comparing recipes: {e}")
-        return pd.DataFrame()
-    
-    
-def generate_meal_plan(days: int, meals_per_day: int) -> pd.DataFrame:
-    """Generate a balanced meal plan.
-
-    Args:
-        days: Number of days in the meal plan
-        meals_per_day: Number of meals per day (max 3: Breakfast, Lunch, Dinner)
-        connection: Neo4j connection object
-
-    Returns:
-        DataFrame containing the meal plan
-    """
-    connection = st.session_state.connection
-    
-    if not st.session_state.connected:
-        return pd.DataFrame()
-
-    try:
-        meal_types = ["Breakfast", "Lunch", "Dinner"][:meals_per_day]
-        meal_plan = []
-
-        for day in range(1, days + 1):
-            for meal_type in meal_types:
-                query = """
-                MATCH (r:Recipe)-[:IS_TYPE]->(m:MealType {name: $meal_type})
-                WITH r, rand() AS random
-                ORDER BY random
-                RETURN r.name AS Recipe, r.calories AS Calories
-                LIMIT 1
-                """
-                recipe_df = connection.execute_query_to_df(query, {"meal_type": meal_type})
-
-                if not recipe_df.empty:
-                    meal_plan.append({
-                        'Day': f"Day {day}",
-                        'Meal_Type': meal_type,
-                        'Recipe': recipe_df.iloc[0]['Recipe'],
-                        'Calories': recipe_df.iloc[0]['Calories']
-                    })
-
-        return pd.DataFrame(meal_plan)
-    except Exception as e:
-        st.error(f"Error generating meal plan: {e}")
-        return pd.DataFrame()
-    
-    
-def get_recipe_recommendations_by_similarity(base_recipe: str, limit: int = 5) -> pd.DataFrame:
-    """Find recipes similar to a given recipe based on shared ingredients."""
-    connection = st.session_state.connection
-    
-    if not st.session_state.connected:
-        return pd.DataFrame()
-
-    try:
-        query = f"""
-        MATCH (base:Recipe {{name: $base_recipe}})-[:CONTAINS]->(shared:Ingredient)<-[:CONTAINS]-(similar:Recipe)
-        WHERE base <> similar
-        WITH similar, count(shared) AS shared_ingredients
-        ORDER BY shared_ingredients DESC
-        RETURN similar.name AS Recipe, 
-               similar.calories AS Calories,
-               shared_ingredients AS Shared_Ingredients
-        LIMIT {limit}
-        """
-        return connection.execute_query_to_df(query, {"base_recipe": base_recipe})
-    except Exception as e:
-        st.error(f"Error finding similar recipes: {e}")
-        return pd.DataFrame()
-
-def find_recipes_with_ingredient(ingredient_name: str, limit: int = 10) -> pd.DataFrame:
-    """Find recipes containing a specific ingredient."""
-    connection = st.session_state.connection
-    
-    if not st.session_state.connected:
-        return pd.DataFrame()
-
-    query = """
-    MATCH (i:Ingredient {name: $ingredient_name})<-[:CONTAINS]-(r:Recipe)
-    RETURN r.name AS Recipe, 
-           r.calories AS Calories, 
-           r.preparation_description AS Preparation
-    ORDER BY r.calories ASC
-    LIMIT $limit
-    """
-
-    return connection.execute_query_to_df(
-        query,
-        {"ingredient_name": ingredient_name, "limit": limit}
-    )
-
 ##### rendering
-
 def render_recipe_card(recipe_row: Dict[str, Any], index: int, source: str, show_rating: bool = False):
     """Render an enhanced recipe card with modern styling and detailed information."""
     recipe_name = recipe_row['Recipe']
@@ -1000,3 +481,5 @@ def render_recipe_card(recipe_row: Dict[str, Any], index: int, source: str, show
                             st.markdown(f"• **{nutrient.title()}:** {value}")
 
     st.markdown("<br>", unsafe_allow_html=True)
+    
+

@@ -1,8 +1,9 @@
 import streamlit as st
 from dashboard.dashboard_helpers import get_recipe_analytics
-from dashboard.dashboard_helpers import create_calorie_distribution_chart
-from dashboard.dashboard_helpers import create_meal_type_chart
-from dashboard.dashboard_helpers import create_ingredient_popularity_chart
+
+from dashboard.visualization import create_calorie_distribution_chart
+from dashboard.visualization import create_meal_type_chart
+from dashboard.visualization import create_ingredient_popularity_chart
 
 def render_analytics_tab():
     """Render the analytics and insights tab."""

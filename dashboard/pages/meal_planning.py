@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from dashboard.dashboard_helpers import generate_meal_plan
 
 
 def render_meal_planning_tab():
@@ -92,3 +91,48 @@ def render_meal_planning_tab():
                 file_name=f"meal_plan_{planning_days}_days.csv",
                 mime="text/csv"
             )
+            
+            
+def generate_meal_plan(days: int, meals_per_day: int) -> pd.DataFrame:
+    """Generate a balanced meal plan.
+
+    Args:
+        days: Number of days in the meal plan
+        meals_per_day: Number of meals per day (max 3: Breakfast, Lunch, Dinner)
+        connection: Neo4j connection object
+
+    Returns:
+        DataFrame containing the meal plan
+    """
+    connection = st.session_state.connection
+    
+    if not st.session_state.connected:
+        return pd.DataFrame()
+
+    try:
+        meal_types = ["Breakfast", "Lunch", "Dinner"][:meals_per_day]
+        meal_plan = []
+
+        for day in range(1, days + 1):
+            for meal_type in meal_types:
+                query = """
+                MATCH (r:Recipe)-[:IS_TYPE]->(m:MealType {name: $meal_type})
+                WITH r, rand() AS random
+                ORDER BY random
+                RETURN r.name AS Recipe, r.calories AS Calories
+                LIMIT 1
+                """
+                recipe_df = connection.execute_query_to_df(query, {"meal_type": meal_type})
+
+                if not recipe_df.empty:
+                    meal_plan.append({
+                        'Day': f"Day {day}",
+                        'Meal_Type': meal_type,
+                        'Recipe': recipe_df.iloc[0]['Recipe'],
+                        'Calories': recipe_df.iloc[0]['Calories']
+                    })
+
+        return pd.DataFrame(meal_plan)
+    except Exception as e:
+        st.error(f"Error generating meal plan: {e}")
+        return pd.DataFrame()

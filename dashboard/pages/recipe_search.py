@@ -1,5 +1,6 @@
 import streamlit as st
-from dashboard.dashboard_helpers import search_recipes_by_name, render_recipe_card
+from dashboard.dashboard_helpers import render_recipe_card
+from dashboard.queries import search_recipes_by_name
 
 def render_search_tab():
     """Render the recipe search tab."""

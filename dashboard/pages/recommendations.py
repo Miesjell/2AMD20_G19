@@ -1,6 +1,8 @@
 import streamlit as st
+import pandas as pd
 import time
-from dashboard.dashboard_helpers import find_personalized_recipes, render_recipe_card
+from typing import Optional, List
+from dashboard.dashboard_helpers import render_recipe_card
 
 
 def render_recommendations_tab():
@@ -105,3 +107,57 @@ def render_recommendations_tab():
 
                 for i, (_, row) in enumerate(recipes_df.iterrows()):
                     render_recipe_card(row, i, "recommendation")
+
+def find_personalized_recipes(
+    diet_preferences: List[str],
+    allergies: List[str],
+    meal_type: Optional[str] = None,
+    min_calories: Optional[int] = None,
+    max_calories: Optional[int] = None,
+    limit: int = 10
+) -> pd.DataFrame:
+    if not st.session_state.connected:
+        return pd.DataFrame()
+
+    params = {}
+    diet_condition, meal_type_condition, allergy_condition, calorie_condition = "", "", "", ""
+
+    if diet_preferences:
+        diet_params = {f"diet{i}": dp for i, dp in enumerate(diet_preferences)}
+        params.update(diet_params)
+        include = [f"EXISTS {{ MATCH (r)<-[:INCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
+        exclude = [f"NOT EXISTS {{ MATCH (r)<-[:EXCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
+        diet_condition = f"\nAND {' AND '.join(include)}\nAND {' AND '.join(exclude)}"
+
+    if meal_type and meal_type != "All Types":
+        params["meal_type"] = meal_type
+        meal_type_condition = "\nAND EXISTS {\nMATCH (r)-[:IS_TYPE]->(:MealType {name: $meal_type})\n}"
+
+    if allergies:
+        allergy_params = {f"allergen{i}": a for i, a in enumerate(allergies)}
+        params.update(allergy_params)
+        direct = [f"NOT EXISTS {{ MATCH (r)-[:MAY_CONTAIN_ALLERGEN]->(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
+        via_ingredient = [f"NOT EXISTS {{ MATCH (r)-[:CONTAINS]->(:Ingredient)<-[:CAUSES]-(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
+        allergy_condition = "\nAND " + " AND ".join([f"({d} AND {v})" for d, v in zip(direct, via_ingredient)])
+
+    if min_calories is not None:
+        params["min_calories"] = min_calories
+        calorie_condition += " AND r.calories >= $min_calories"
+    if max_calories is not None:
+        params["max_calories"] = max_calories
+        calorie_condition += " AND r.calories <= $max_calories"
+
+    query = f"""
+    MATCH (r:Recipe)
+    WHERE true
+    {diet_condition}
+    {meal_type_condition}
+    {allergy_condition}
+    {calorie_condition}
+    RETURN r.name AS Recipe, r.calories AS Calories,
+           r.preparation_description AS Preparation
+    ORDER BY r.calories ASC
+    LIMIT {limit}
+    """
+
+    return st.session_state.connection.execute_query_to_df(query, params)

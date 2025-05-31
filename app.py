@@ -19,7 +19,7 @@ from dashboard.dashboard_helpers import apply_custom_css
 from dashboard.dashboard_helpers import get_recipe_analytics
 
 
-from dashboard.dashboard_helpers import display_metrics_dashboard
+from dashboard.visualization import display_metrics_dashboard
 from dashboard.database_init import connect_to_database
 
 

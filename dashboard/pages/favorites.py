@@ -1,6 +1,6 @@
 import streamlit as st
-from dashboard.dashboard_helpers import get_saved_recipes, render_recipe_card
-
+from dashboard.dashboard_helpers import render_recipe_card
+import pandas as pd
 
 def render_favorites_tab():
     """Render the favorites tab with enhanced features."""
@@ -40,3 +40,61 @@ def render_favorites_tab():
         # Render each saved recipe card
         for i, (_, row) in enumerate(saved_recipes_df.iterrows()):
             render_recipe_card(row, i, source="favorite", show_rating=True)
+            
+            
+def get_saved_recipes(person_id: str) -> pd.DataFrame:
+    """
+    Retrieve saved recipes for a user. Falls back to session state if database query fails or returns nothing.
+    
+    Args:
+        person_id: ID of the user
+    
+    Returns:
+        DataFrame of saved recipes with calories, rating, and timestamp
+    """
+    if not st.session_state.connected:
+        return pd.DataFrame()
+
+    try:
+        # Try to fetch from the database
+        query = """
+        MATCH (p:Person {id: $person_id})-[l:LIKES]->(r:Recipe)
+        RETURN r.name AS Recipe, r.calories AS Calories,
+               l.rating AS Rating, l.timestamp AS SavedOn
+        ORDER BY l.timestamp DESC
+        """
+        df = st.session_state.connection.execute_query_to_df(query, {"person_id": person_id})
+        if not df.empty:
+            return df
+
+    except Exception as e:
+        st.error(f"Error retrieving saved recipes: {e}")
+
+    # Fallback to session state
+    if 'favorite_recipes' not in st.session_state or not st.session_state.favorite_recipes:
+        return pd.DataFrame()
+
+    recipe_data = []
+    for recipe in st.session_state.favorite_recipes:
+        details_query = """
+        MATCH (r:Recipe {name: $recipe_name})
+        RETURN r.name AS Recipe, r.calories AS Calories
+        """
+        try:
+            df = st.session_state.connection.execute_query_to_df(details_query, {"recipe_name": recipe})
+            if not df.empty:
+                data = df.iloc[0].to_dict()
+                data["Rating"] = 5
+                data["SavedOn"] = pd.Timestamp.now()
+                recipe_data.append(data)
+            else:
+                recipe_data.append({
+                    "Recipe": recipe,
+                    "Calories": None,
+                    "Rating": 5,
+                    "SavedOn": pd.Timestamp.now()
+                })
+        except Exception:
+            continue
+
+    return pd.DataFrame(recipe_data)
