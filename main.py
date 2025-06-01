@@ -34,6 +34,7 @@ from src.graph_db.loaders.recipes import RecipeLoader
 from src.graph_db.loaders.persons import PersonLoader
 from src.graph_db.relationships import RelationshipBuilder
 from src.graph_db.queries.manager import QueryManager
+from src.utils.ingredient_parser import split_ingredients, parse_ingredient, parse_ingredient_only_ingredient
 
 
 # Configure logging

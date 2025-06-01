@@ -5,7 +5,13 @@ This module provides functionality for loading recipe data into the Neo4j databa
 It handles different recipe data formats and extracts ingredients, nutritional 
 information, and other relevant properties.
 """
+from pathlib import Path
 from typing import Dict, Any, List, Optional
+from src.utils.ingredient_parser import split_ingredients, parse_ingredient, parse_ingredient_only_ingredient
+from src.utils.ingredient_embedder import IngredientNormalizer
+
+# alter threshold
+normalizer = IngredientNormalizer(threshold=0.75)
 
 import pandas as pd
 import numpy as np
@@ -194,50 +200,123 @@ class RecipeLoader(DataLoader):
                     pass
         return None
     
+    # def _extract_ingredients(self, row: pd.Series) -> List[str]:
+    #     """
+    #     Extract ingredients from different possible formats.
+        
+    #     Args:
+    #         row: DataFrame row
+            
+    #     Returns:
+    #         List of ingredient strings
+    #     """
+    #     ingredients = []
+        
+    #     # Get the recipe name for better error logging
+    #     recipe_name = row.get("title", row.get("Name", "Unknown Recipe"))
+    #     if isinstance(recipe_name, np.ndarray) and recipe_name.size > 0:
+    #         recipe_name = recipe_name[0]
+    #     recipe_name = str(recipe_name)
+        
+    #     # Try RecipeIngredientParts first (most common in this dataset)
+    #     if "RecipeIngredientParts" in row:
+    #         ingredients = self._extract_from_field(row["RecipeIngredientParts"])
+                
+    #     # If no ingredients found, try standard 'ingredients' column
+    #     if not ingredients and "ingredients" in row:
+    #         ingredients = self._extract_from_field(row["ingredients"])
+        
+    #     # If still no ingredients, try any column that might contain ingredients
+    #     if not ingredients:
+    #         for col in row.index:
+    #             if 'ingredient' in str(col).lower() and col not in ["RecipeIngredientParts", "ingredients"]:
+    #                 col_val = row[col]
+    #                 # Skip null values
+    #                 if pd.isna(col_val).all() if hasattr(pd.isna(col_val), 'all') else pd.isna(col_val):
+    #                     continue
+    #                 ingredients = self._extract_from_field(col_val)
+    #                 if ingredients:
+    #                     break
+        
+    #     # If still no ingredients found, use a placeholder
+    #     if not ingredients:
+    #         ingredients = ["Unknown ingredient"]
+        
+    #     # Ingredient parser
+    #     parsed = []
+    #     for item in ingredients:
+    #         # Smart split if needed
+    #         parts = split_ingredients(item) if ',' in item else [item]
+    #         for part in parts:
+    #             #amt, unit, name = parse_ingredient(part)
+    #             #parsed.append(f"{amt} {unit} {name}".strip()) 
+    #             name = parse_ingredient_only_ingredient(part)
+    #             parsed.append(name)   
+
+    #     return parsed or ["Unknown ingredient"]
     def _extract_ingredients(self, row: pd.Series) -> List[str]:
         """
         Extract ingredients from different possible formats.
         
+        If the 'ingredients' column is present, it applies the ingredient parser.
+        Otherwise, it uses fallback fields without parsing.
+
         Args:
             row: DataFrame row
-            
+
         Returns:
-            List of ingredient strings
+            List of cleaned ingredient names
         """
-        ingredients = []
-        
-        # Get the recipe name for better error logging
+        # Handle bad or null recipe names gracefully
         recipe_name = row.get("title", row.get("Name", "Unknown Recipe"))
         if isinstance(recipe_name, np.ndarray) and recipe_name.size > 0:
             recipe_name = recipe_name[0]
         recipe_name = str(recipe_name)
-        
-        # Try RecipeIngredientParts first (most common in this dataset)
+
+        # === Case 1: 'ingredients' column — apply parser; old ===
+
+        # if "ingredients" in row and isinstance(row["ingredients"], (str, list)):
+        #     raw_ingredients = self._extract_from_field(row["ingredients"])
+        #     parsed = []
+        #     for item in raw_ingredients:
+        #         parts = split_ingredients(item) if ',' in item else [item]
+        #         for part in parts:
+        #             name = parse_ingredient(part)
+        #             parsed.append(name)
+        #     return parsed or ["Unknown ingredient"]
+
+        # === Case 1: 'ingredients' column — apply parser; including embedding, i.e. new =====
+        if "ingredients" in row and isinstance(row["ingredients"], (str, list)):
+            raw_ingredients = self._extract_from_field(row["ingredients"])
+            parsed = []
+            for item in raw_ingredients:
+                parts = split_ingredients(item) if ',' in item else [item]
+                for part in parts:
+                    _, _, name = parse_ingredient(part)
+                    canonical = normalizer.normalize(name)
+                    parsed.append(canonical)
+            return parsed or ["Unknown ingredient"]        
+
+        # === Case 2: Try RecipeIngredientParts or other fallback fields ===
+        ingredients = []
+
         if "RecipeIngredientParts" in row:
             ingredients = self._extract_from_field(row["RecipeIngredientParts"])
-                
-        # If no ingredients found, try standard 'ingredients' column
-        if not ingredients and "ingredients" in row:
-            ingredients = self._extract_from_field(row["ingredients"])
-        
-        # If still no ingredients, try any column that might contain ingredients
+
+        # Fallback: any column with 'ingredient' in its name
         if not ingredients:
             for col in row.index:
-                if 'ingredient' in str(col).lower() and col not in ["RecipeIngredientParts", "ingredients"]:
+                if "ingredient" in str(col).lower() and col not in ["RecipeIngredientParts", "ingredients"]:
                     col_val = row[col]
-                    # Skip null values
                     if pd.isna(col_val).all() if hasattr(pd.isna(col_val), 'all') else pd.isna(col_val):
                         continue
                     ingredients = self._extract_from_field(col_val)
                     if ingredients:
                         break
-        
-        # If still no ingredients found, use a placeholder
-        if not ingredients:
-            ingredients = ["Unknown ingredient"]
-            
-        return ingredients
-    
+
+        return ingredients or ["Unknown ingredient"]
+
+
     def _extract_from_field(self, field_value: Any) -> List[str]:
         """
         Extract ingredients from a field value of various types.
@@ -268,3 +347,29 @@ class RecipeLoader(DataLoader):
             ingredients.append(self.clean_text(field_value))
             
         return ingredients
+
+
+#= == test
+def load_full_format_recipes(data_dir: str = "data"):
+    path = Path(data_dir) / "full_format_recipes.json"
+    df = pd.read_json(path)
+    return df
+
+if __name__ == "__main__":
+    import pandas as pd
+
+    # Load the dataset
+    df = load_full_format_recipes()
+
+    # Select a specific row by title
+    row = df.iloc[0]
+    # Create a RecipeLoader instance (no DB needed)
+    loader = RecipeLoader()
+
+    # Run the ingredient extractor
+    ingredients = loader._extract_ingredients(row)
+
+    # Print results
+    print(f"\nParsed ingredients for: {row['title']}")
+    for ing in ingredients:
+        print("-", ing)
