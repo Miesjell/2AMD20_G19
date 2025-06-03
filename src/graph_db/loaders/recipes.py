@@ -14,6 +14,7 @@ from neo4j import Driver
 from tqdm import tqdm
 from .base import DataLoader
 from utils.ingredient_embedder import split_ingredients, parse_ingredient, IngredientNormalizer
+from utils.meal_type_embedder import MealTypeEmbedder
 
 class RecipeLoader(DataLoader):
     """Loader for recipe data into the Neo4j knowledge graph."""
@@ -218,22 +219,18 @@ class RecipeLoader(DataLoader):
     
     def _assign_meal_type(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Assign a meal type to each recipe based on keywords in the name.
-        Categories: Breakfast, Lunch, Dinner, Drink, Other
+        Assign a meal type to each recipe using batched embedding similarity
+        to canonical categories (Breakfast, Lunch, Dinner, Drink, Other).
         """
-        def categorize(name: str) -> str:
-            name = name.lower()
-            if any(k in name for k in ["breakfast", "pancake", "waffle", "cereal", "oatmeal", "omelet", "omelette", "bacon", "toast"]):
-                return "Breakfast"
-            if any(k in name for k in ["lunch", "sandwich", "salad", "wrap", "soup"]):
-                return "Lunch"
-            if any(k in name for k in ["dinner", "roast", "steak", "pasta", "casserole"]):
-                return "Dinner"
-            if any(k in name for k in ["cocktail", "drink", "smoothie", "juice", "coffee", "tea", "wine", "beer", "liquor", "whiskey", "vodka"]):
-                return "Drink"
-            return "Other"
+        from utils.meal_type_embedder import MealTypeEmbedder
+        embedder = MealTypeEmbedder(threshold=0.3)
 
-        df["meal_type"] = df["name"].apply(lambda x: categorize(str(x)))
+        # Combine name + description for better context
+        texts = df.apply(lambda row: f"{row.get('name', '')} {row.get('description', '')}".strip(), axis=1)
+
+        # Batch classify
+        df["meal_type"] = embedder.classify_bulk(texts.tolist())
+
         return df
     
     
