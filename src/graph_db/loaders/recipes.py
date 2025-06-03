@@ -13,6 +13,7 @@ import logging
 from neo4j import Driver
 from tqdm import tqdm
 from .base import DataLoader
+from utils.ingredient_embedder import split_ingredients, parse_ingredient, IngredientNormalizer
 
 class RecipeLoader(DataLoader):
     """Loader for recipe data into the Neo4j knowledge graph."""
@@ -248,30 +249,57 @@ class RecipeLoader(DataLoader):
         Returns:
             DataFrame with a new 'ingredients' column.
         """
+        normalizer = IngredientNormalizer(threshold=0.75)
+
+        # 1. First pass — stage all ingredients for embedding
+        def stage(row: pd.Series):
+            def add_items(text):
+                for item in split_ingredients(text):
+                    ing = parse_ingredient(item)
+                    if isinstance(ing, tuple):
+                        ing = ing[-1]
+                    if ing:
+                        normalizer.stage_ingredient(ing)
+
+            if "recipeingredientparts" in row and isinstance(row["recipeingredientparts"], np.ndarray):
+                for part in row["recipeingredientparts"]:
+                    if isinstance(part, str):
+                        add_items(part)
+            elif "ingredients" in row and isinstance(row["ingredients"], list):
+                for raw in row["ingredients"]:
+                    if isinstance(raw, str):
+                        add_items(raw)
+                    elif isinstance(raw, (int, float)):
+                        normalizer.stage_ingredient(str(raw))
+
+        df.apply(stage, axis=1)
+
+        # 2. Embed everything at once
+        normalizer.build_embeddings()
+
+        # 3. Second pass — build ingredient lists using canonical names
         def extract(row: pd.Series) -> List[str]:
             ingredients = []
 
-            # Try RecipeIngredientParts
-            if "recipeingredientparts" in row and isinstance(row["recipeingredientparts"], np.ndarray):
-                try:
-                    ingredients += [
-                        self.clean_text(item)
-                        for item in row["recipeingredientparts"]
-                        if isinstance(item, str) and item.strip()
-                    ]
-                except Exception as e:
-                    self.logger.debug(f"Error processing RecipeIngredientParts: {e}")
+            def add_items(text):
+                for item in split_ingredients(text):
+                    ing = parse_ingredient(item)
+                    if isinstance(ing, tuple):
+                        ing = ing[-1]
+                    if ing:
+                        canonical = normalizer.normalize(ing)
+                        ingredients.append(canonical)
 
-            # Fallback to 'ingredients' field
-            if not ingredients and "ingredients" in row and isinstance(row["ingredients"], list):
-                try:
-                    for item in row["ingredients"]:
-                        if isinstance(item, str) and item.strip():
-                            ingredients.append(self.clean_text(item))
-                        elif isinstance(item, (int, float)):
-                            ingredients.append(self.clean_text(str(item)))
-                except Exception as e:
-                    self.logger.debug(f"Error processing ingredients field: {e}")
+            if "recipeingredientparts" in row and isinstance(row["recipeingredientparts"], np.ndarray):
+                for part in row["recipeingredientparts"]:
+                    if isinstance(part, str):
+                        add_items(part)
+            elif "ingredients" in row and isinstance(row["ingredients"], list):
+                for raw in row["ingredients"]:
+                    if isinstance(raw, str):
+                        add_items(raw)
+                    elif isinstance(raw, (int, float)):
+                        ingredients.append(normalizer.normalize(str(raw)))
 
             return ingredients or ["Unknown ingredient"]
 
