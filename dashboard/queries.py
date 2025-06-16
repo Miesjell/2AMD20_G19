@@ -107,6 +107,88 @@ def search_recipes_by_name(search_term: str, limit: int = 10) -> pd.DataFrame:
     
     return st.session_state.connection.execute_query_to_df(query, {"search_term": search_term})
 
+def search_recipes_with_dietary_filter(
+    search_term: str = "", 
+    dietary_preferences: List[str] = None, 
+    allergies: List[str] = None,
+    meal_type: str = None,
+    limit: int = 20
+) -> pd.DataFrame:
+    """
+    Advanced recipe search with efficient dietary filtering using pre-classified ingredients.
+    
+    This function uses the new ingredient classification system for blazing fast filtering.
+    """
+    if not st.session_state.connected:
+        return pd.DataFrame()
+    
+    conditions = []
+    params = {}
+    
+    # Name-based search
+    if search_term:
+        conditions.append("toLower(r.name) CONTAINS toLower($search_term)")
+        params["search_term"] = search_term
+    
+    # Efficient dietary preference filtering
+    if dietary_preferences:
+        diet_conditions = []
+        for i, pref in enumerate(dietary_preferences):
+            param_name = f"diet{i}"
+            params[param_name] = pref
+            # Use pre-computed INCLUDES relationships - FAST!
+            diet_conditions.append(f"EXISTS {{ MATCH (dp:DietPreference {{name: ${param_name}}})-[:INCLUDES]->(r) }}")
+        
+        if diet_conditions:
+            conditions.append(f"({' AND '.join(diet_conditions)})")
+    
+    # Efficient allergen filtering using ingredient properties
+    if allergies:
+        allergen_conditions = []
+        for allergen in allergies:
+            allergen_lower = allergen.lower()
+            if allergen_lower in ['nuts', 'peanuts']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_nut = true }")
+            elif allergen_lower in ['shellfish', 'seafood']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_seafood = true }")
+            elif allergen_lower == 'fish':
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_fish = true }")
+            elif allergen_lower in ['eggs', 'egg']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_egg = true }")
+            elif allergen_lower == 'soy':
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_soy = true }")
+            elif allergen_lower in ['dairy', 'milk']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_dairy = true }")
+        
+        if allergen_conditions:
+            conditions.append(f"({' AND '.join(allergen_conditions)})")
+    
+    # Meal type filtering
+    if meal_type and meal_type != "All Types":
+        params["meal_type"] = meal_type
+        conditions.append("EXISTS { MATCH (r)-[:IS_TYPE]->(mt:MealType {name: $meal_type}) }")
+    
+    # Build WHERE clause
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+    
+    query = f"""
+    MATCH (r:Recipe)
+    {where_clause}
+    RETURN r.name AS Recipe, 
+           r.calories AS Calories,
+           r.preparation_description AS Preparation
+    ORDER BY r.name
+    LIMIT {limit}
+    """
+    
+    try:
+        return st.session_state.connection.execute_query_to_df(query, params)
+    except Exception as e:
+        st.error(f"Search error: {e}")
+        return pd.DataFrame()
+
 ##### These ones are not used?
 
 # def find_recipes_for_diet(diet_preference: str, limit: int = 10) -> pd.DataFrame:

@@ -37,6 +37,14 @@ class RelationshipBuilder:
         definitions = [
             self._non_vegetarian_exclusions(),
             self._vegetarian_inclusions(),
+            self._vegan_exclusions(),
+            self._vegan_inclusions(),
+            self._gluten_free_exclusions(),
+            self._gluten_free_inclusions(),
+            self._dairy_free_exclusions(),
+            self._dairy_free_inclusions(),
+            self._nut_free_exclusions(),
+            self._nut_free_inclusions(),
             self._allergen_links(),
             self._price_category_assignment(),
             self._personalized_recommendations(),
@@ -99,6 +107,145 @@ class RelationshipBuilder:
                     MATCH (r)-[:CONTAINS]->(:Ingredient)
                 }
                 MERGE (d:DietPreference {name: 'Vegetarian'})
+                MERGE (d)-[:INCLUDES]->(r)
+            """
+        }
+
+    def _vegan_exclusions(self) -> Dict[str, str]:
+        """Create exclusion relationships for non-vegan recipes."""
+        return {
+            "name": "vegan_exclusions",
+            "description": "Flag recipes containing animal products as excluded from vegan diet",
+            "query": """
+                MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
+                WHERE i.is_vegan = false
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Vegan'})
+                MERGE (d)-[:EXCLUDES]->(r)
+            """
+        }
+
+    def _vegan_inclusions(self) -> Dict[str, str]:
+        """Create inclusion relationships for vegan-friendly recipes."""
+        return {
+            "name": "vegan_inclusions",
+            "description": "Connect vegan-friendly food recipes to vegan diet preference",
+            "query": """
+                MATCH (r:Recipe)
+                WHERE NOT EXISTS {
+                    MATCH (r)-[:CONTAINS]->(i:Ingredient)
+                    WHERE i.is_vegan = false
+                }
+                AND NOT EXISTS {
+                    MATCH (r)-[:IS_TYPE]->(:MealType {name: 'Drink'})
+                }
+                AND EXISTS {
+                    MATCH (r)-[:CONTAINS]->(:Ingredient)
+                }
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Vegan'})
+                MERGE (d)-[:INCLUDES]->(r)
+            """
+        }
+
+    def _gluten_free_exclusions(self) -> Dict[str, str]:
+        """Create exclusion relationships for gluten-containing recipes."""
+        return {
+            "name": "gluten_free_exclusions",
+            "description": "Flag recipes containing gluten as excluded from gluten-free diet",
+            "query": """
+                MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
+                WHERE i.is_gluten_containing = true
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Gluten-Free'})
+                MERGE (d)-[:EXCLUDES]->(r)
+            """
+        }
+
+    def _gluten_free_inclusions(self) -> Dict[str, str]:
+        """Create inclusion relationships for gluten-free recipes."""
+        return {
+            "name": "gluten_free_inclusions",
+            "description": "Connect gluten-free recipes to gluten-free diet preference",
+            "query": """
+                MATCH (r:Recipe)
+                WHERE NOT EXISTS {
+                    MATCH (r)-[:CONTAINS]->(i:Ingredient)
+                    WHERE i.is_gluten_containing = true
+                }
+                AND EXISTS {
+                    MATCH (r)-[:CONTAINS]->(:Ingredient)
+                }
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Gluten-Free'})
+                MERGE (d)-[:INCLUDES]->(r)
+            """
+        }
+
+    def _dairy_free_exclusions(self) -> Dict[str, str]:
+        """Create exclusion relationships for dairy-containing recipes."""
+        return {
+            "name": "dairy_free_exclusions",
+            "description": "Flag recipes containing dairy as excluded from dairy-free diet",
+            "query": """
+                MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
+                WHERE i.is_dairy = true
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Dairy-Free'})
+                MERGE (d)-[:EXCLUDES]->(r)
+            """
+        }
+
+    def _dairy_free_inclusions(self) -> Dict[str, str]:
+        """Create inclusion relationships for dairy-free recipes."""
+        return {
+            "name": "dairy_free_inclusions",
+            "description": "Connect dairy-free recipes to dairy-free diet preference",
+            "query": """
+                MATCH (r:Recipe)
+                WHERE NOT EXISTS {
+                    MATCH (r)-[:CONTAINS]->(i:Ingredient)
+                    WHERE i.is_dairy = true
+                }
+                AND EXISTS {
+                    MATCH (r)-[:CONTAINS]->(:Ingredient)
+                }
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Dairy-Free'})
+                MERGE (d)-[:INCLUDES]->(r)
+            """
+        }
+
+    def _nut_free_exclusions(self) -> Dict[str, str]:
+        """Create exclusion relationships for nut-containing recipes."""
+        return {
+            "name": "nut_free_exclusions",
+            "description": "Flag recipes containing nuts as excluded from nut-free diet",
+            "query": """
+                MATCH (r:Recipe)-[:CONTAINS]->(i:Ingredient)
+                WHERE i.is_nut = true
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Nut-Free'})
+                MERGE (d)-[:EXCLUDES]->(r)
+            """
+        }
+
+    def _nut_free_inclusions(self) -> Dict[str, str]:
+        """Create inclusion relationships for nut-free recipes."""
+        return {
+            "name": "nut_free_inclusions",
+            "description": "Connect nut-free recipes to nut-free diet preference",
+            "query": """
+                MATCH (r:Recipe)
+                WHERE NOT EXISTS {
+                    MATCH (r)-[:CONTAINS]->(i:Ingredient)
+                    WHERE i.is_nut = true
+                }
+                AND EXISTS {
+                    MATCH (r)-[:CONTAINS]->(:Ingredient)
+                }
+                WITH DISTINCT r
+                MERGE (d:DietPreference {name: 'Nut-Free'})
                 MERGE (d)-[:INCLUDES]->(r)
             """
         }
@@ -217,6 +364,14 @@ class RelationshipBuilder:
         return [
             self._non_vegetarian_exclusions(),
             self._vegetarian_inclusions(),
+            self._vegan_exclusions(),
+            self._vegan_inclusions(),
+            self._gluten_free_exclusions(),
+            self._gluten_free_inclusions(),
+            self._dairy_free_exclusions(),
+            self._dairy_free_inclusions(),
+            self._nut_free_exclusions(),
+            self._nut_free_inclusions(),
             self._allergen_links(),
             self._price_category_assignment(),
             self._personalized_recommendations(),

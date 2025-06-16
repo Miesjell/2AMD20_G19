@@ -116,48 +116,81 @@ def find_personalized_recipes(
     max_calories: Optional[int] = None,
     limit: int = 10
 ) -> pd.DataFrame:
+    """Find personalized recipes using efficient pre-classified ingredient properties."""
     if not st.session_state.connected:
         return pd.DataFrame()
 
     params = {}
-    diet_condition, meal_type_condition, allergy_condition, calorie_condition = "", "", "", ""
+    conditions = []
 
+    # Efficient dietary preference filtering using pre-computed relationships
     if diet_preferences:
-        diet_params = {f"diet{i}": dp for i, dp in enumerate(diet_preferences)}
-        params.update(diet_params)
-        include = [f"EXISTS {{ MATCH (r)<-[:INCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
-        exclude = [f"NOT EXISTS {{ MATCH (r)<-[:EXCLUDES]-(dp:DietPreference {{name: $diet{i}}}) }}" for i in range(len(diet_preferences))]
-        diet_condition = f"\nAND {' AND '.join(include)}\nAND {' AND '.join(exclude)}"
+        diet_conditions = []
+        for i, pref in enumerate(diet_preferences):
+            param_name = f"diet{i}"
+            params[param_name] = pref
+            # Use the pre-computed INCLUDES relationships
+            diet_conditions.append(f"EXISTS {{ MATCH (dp:DietPreference {{name: ${param_name}}})-[:INCLUDES]->(r) }}")
+        
+        if diet_conditions:
+            conditions.append(f"({' AND '.join(diet_conditions)})")
 
+    # Meal type filtering
     if meal_type and meal_type != "All Types":
         params["meal_type"] = meal_type
-        meal_type_condition = "\nAND EXISTS {\nMATCH (r)-[:IS_TYPE]->(:MealType {name: $meal_type})\n}"
+        conditions.append("EXISTS { MATCH (r)-[:IS_TYPE]->(mt:MealType {name: $meal_type}) }")
 
+    # Efficient allergen filtering using ingredient properties
     if allergies:
-        allergy_params = {f"allergen{i}": a for i, a in enumerate(allergies)}
-        params.update(allergy_params)
-        direct = [f"NOT EXISTS {{ MATCH (r)-[:MAY_CONTAIN_ALLERGEN]->(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
-        via_ingredient = [f"NOT EXISTS {{ MATCH (r)-[:CONTAINS]->(:Ingredient)<-[:CAUSES]-(:Allergy {{name: $allergen{i}}}) }}" for i in range(len(allergies))]
-        allergy_condition = "\nAND " + " AND ".join([f"({d} AND {v})" for d, v in zip(direct, via_ingredient)])
+        allergen_conditions = []
+        for i, allergen in enumerate(allergies):
+            allergen_lower = allergen.lower()
+            if allergen_lower in ['nuts', 'peanuts']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_nut = true }")
+            elif allergen_lower in ['shellfish', 'seafood']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_seafood = true }")
+            elif allergen_lower == 'fish':
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_fish = true }")
+            elif allergen_lower in ['eggs', 'egg']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_egg = true }")
+            elif allergen_lower == 'soy':
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_soy = true }")
+            elif allergen_lower in ['dairy', 'milk']:
+                allergen_conditions.append("NOT EXISTS { MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE ing.is_dairy = true }")
+            else:
+                # Fall back to name-based search for custom allergens
+                param_name = f"allergen{i}"
+                params[param_name] = allergen
+                allergen_conditions.append(f"NOT EXISTS {{ MATCH (r)-[:CONTAINS]->(ing:Ingredient) WHERE toLower(ing.name) CONTAINS toLower(${param_name}) }}")
+        
+        if allergen_conditions:
+            conditions.append(f"({' AND '.join(allergen_conditions)})")
 
+    # Calorie filtering
     if min_calories is not None:
         params["min_calories"] = min_calories
-        calorie_condition += " AND r.calories >= $min_calories"
+        conditions.append("r.calories >= $min_calories")
     if max_calories is not None:
         params["max_calories"] = max_calories
-        calorie_condition += " AND r.calories <= $max_calories"
+        conditions.append("r.calories <= $max_calories")
+
+    # Build WHERE clause
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
 
     query = f"""
     MATCH (r:Recipe)
-    WHERE true
-    {diet_condition}
-    {meal_type_condition}
-    {allergy_condition}
-    {calorie_condition}
-    RETURN r.name AS Recipe, r.calories AS Calories,
+    {where_clause}
+    RETURN r.name AS Recipe, 
+           r.calories AS Calories,
            r.preparation_description AS Preparation
     ORDER BY r.calories ASC
     LIMIT {limit}
     """
 
-    return st.session_state.connection.execute_query_to_df(query, params)
+    try:
+        return st.session_state.connection.execute_query_to_df(query, params)
+    except Exception as e:
+        st.error(f"Error finding personalized recipes: {e}")
+        return pd.DataFrame()

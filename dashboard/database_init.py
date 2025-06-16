@@ -41,18 +41,18 @@ def load_diet_preferences():
         df = st.session_state.connection.execute_query_to_df(query, {})
         st.session_state.diet_preferences = (
             df["DietPreference"].tolist() if not df.empty else [
-                "Vegetarian", "Vegan", "Pescatarian", 
-                "Gluten-Free", "Dairy-Free", "Low-Carb",
+                "Vegetarian", "Vegan", "Gluten-Free", 
+                "Dairy-Free", "Nut-Free", "Pescatarian",
                 "Keto", "Paleo", "Mediterranean"
             ]
         )
         if df.empty:
-            st.sidebar.warning("No diet preferences found in database, using defaults")
+            st.sidebar.info("Loading default diet preferences - they'll be available after data loading")
     except Exception as e:
         st.error(f"Error loading diet preferences: {e}")
         st.session_state.diet_preferences = [
-            "Vegetarian", "Vegan", "Pescatarian", 
-            "Gluten-Free", "Dairy-Free", "Low-Carb",
+            "Vegetarian", "Vegan", "Gluten-Free", 
+            "Dairy-Free", "Nut-Free", "Pescatarian",
             "Keto", "Paleo", "Mediterranean"
         ]
 
@@ -73,17 +73,20 @@ def load_allergies():
         df = st.session_state.connection.execute_query_to_df(query, {})
         st.session_state.allergies = (
             df["Allergen"].tolist() if not df.empty else [
-                "Peanuts", "Tree Nuts", "Milk", "Eggs", "Fish",
-                "Shellfish", "Soy", "Wheat", "Gluten", "Sesame"
+                # Common allergens that match our ingredient classification
+                "Nuts", "Peanuts", "Fish", "Shellfish", "Seafood",
+                "Eggs", "Dairy", "Milk", "Soy", "Gluten", 
+                "Wheat", "Sesame", "Tree Nuts"
             ]
         )
         if df.empty:
-            st.sidebar.warning("No allergies found in database, using defaults")
+            st.sidebar.info("Loading default allergens - they'll be available after data loading")
     except Exception as e:
         st.error(f"Error loading allergies: {e}")
         st.session_state.allergies = [
-            "Peanuts", "Tree Nuts", "Milk", "Eggs", "Fish",
-            "Shellfish", "Soy", "Wheat", "Gluten", "Sesame"
+            "Nuts", "Peanuts", "Fish", "Shellfish", "Seafood",
+            "Eggs", "Dairy", "Milk", "Soy", "Gluten", 
+            "Wheat", "Sesame", "Tree Nuts"
         ]
 
 

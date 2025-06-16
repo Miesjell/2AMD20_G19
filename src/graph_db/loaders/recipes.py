@@ -15,6 +15,9 @@ from tqdm import tqdm
 from .base import DataLoader
 from utils.ingredient_embedder import split_ingredients, parse_ingredient, IngredientNormalizer
 from utils.meal_type_embedder import MealTypeEmbedder
+from utils.ingredient_classifier import classify_ingredients
+from utils.ingredient_classifier import classify_ingredients
+from utils.ingredient_classifier import classify_ingredients
 
 class RecipeLoader(DataLoader):
     """Loader for recipe data into the Neo4j knowledge graph."""
@@ -65,7 +68,7 @@ class RecipeLoader(DataLoader):
             batches = self.batch_data(df, batch_size)
             # Create constraints and indexes if needed
             setup_query = self._setup_constraints()
-            # Query for creating recipes and ingredients
+            # Query for creating recipes and ingredients with dietary properties
             query = """
             UNWIND $recipes AS recipe
             MERGE (r:Recipe {id: recipe.id})
@@ -85,10 +88,24 @@ class RecipeLoader(DataLoader):
             MERGE (r)-[:IS_TYPE]->(mt)
 
             WITH r, recipe
-            UNWIND recipe.ingredients AS ingredient
-            WITH r, ingredient
-            WHERE ingredient IS NOT NULL AND ingredient <> '' AND ingredient <> 'Unknown ingredient'
-            MERGE (i:Ingredient {name: ingredient})
+            UNWIND recipe.ingredients AS ingredient_data
+            WITH r, ingredient_data
+            WHERE ingredient_data.name IS NOT NULL AND ingredient_data.name <> '' AND ingredient_data.name <> 'Unknown ingredient'
+            MERGE (i:Ingredient {name: ingredient_data.name})
+            SET i.is_meat = ingredient_data.is_meat,
+                i.is_poultry = ingredient_data.is_poultry,
+                i.is_fish = ingredient_data.is_fish,
+                i.is_seafood = ingredient_data.is_seafood,
+                i.is_dairy = ingredient_data.is_dairy,
+                i.is_egg = ingredient_data.is_egg,
+                i.is_gluten_containing = ingredient_data.is_gluten_containing,
+                i.is_nut = ingredient_data.is_nut,
+                i.is_soy = ingredient_data.is_soy,
+                i.is_vegetarian = ingredient_data.is_vegetarian,
+                i.is_vegan = ingredient_data.is_vegan,
+                i.is_kosher = ingredient_data.is_kosher,
+                i.is_halal = ingredient_data.is_halal,
+                i.allergens = ingredient_data.allergens
             MERGE (r)-[:CONTAINS]->(i)
             """
 
@@ -112,6 +129,33 @@ class RecipeLoader(DataLoader):
                         records = []
                         for _, row in batch.iterrows():
                             try:
+                                # Get ingredient names and classify them
+                                ingredient_names = [ing for ing in row["ingredients"] if ing and ing != "Unknown ingredient"]
+                                classified_ingredients = classify_ingredients(ingredient_names)
+                                
+                                # Convert to the format needed for Cypher
+                                ingredient_data = []
+                                for ing_name in ingredient_names:
+                                    if ing_name in classified_ingredients:
+                                        props = classified_ingredients[ing_name]
+                                        ingredient_data.append({
+                                            'name': ing_name,
+                                            'is_meat': props.is_meat,
+                                            'is_poultry': props.is_poultry,
+                                            'is_fish': props.is_fish,
+                                            'is_seafood': props.is_seafood,
+                                            'is_dairy': props.is_dairy,
+                                            'is_egg': props.is_egg,
+                                            'is_gluten_containing': props.is_gluten_containing,
+                                            'is_nut': props.is_nut,
+                                            'is_soy': props.is_soy,
+                                            'is_vegetarian': props.is_vegetarian,
+                                            'is_vegan': props.is_vegan,
+                                            'is_kosher': props.is_kosher,
+                                            'is_halal': props.is_halal,
+                                            'allergens': props.allergens
+                                        })
+                                
                                 record = {
                                     "id": row["id"],
                                     "name": row["name"],
@@ -124,7 +168,7 @@ class RecipeLoader(DataLoader):
                                     "sodium": float(row["sodium"]) if pd.notna(row["sodium"]) else None,
                                     "price_range": row["price_range"],
                                     "meal_type": row["meal_type"],
-                                    "ingredients": [ing for ing in row["ingredients"] if ing and ing != "Unknown ingredient"]
+                                    "ingredients": ingredient_data
                                 }
                                 records.append(record)
                             except Exception as e:
